@@ -190,11 +190,10 @@ module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
     ca-co : co x y → Ca x y -- w × w
     ca-fr : fr x y → Ca x y -- r × w . rf⁻¹;co
 
-  -- Observed by
+  -- | Observed by
   data Obs (x y : Event) : Set where
     obs-rfe : rfe x y → Obs x y
-    obs-coe : coe x y → Obs x y
-    obs-fre : fre x y → Obs x y
+    obs-ca  : Ca  x y → Obs x y
 
   -- | Barrier-ordered-before
   --
@@ -203,15 +202,15 @@ module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
   -- This data structure is much easier to handle than taking _∪₂_ over all,
   -- as constructing (or pattern-matching on) an instance looks like: inj₁ (inj₁ (inj₁ ...)))
   data Bob (x y : Event) : Set where
-    bob-f    : ( po ⨾ ⦗ EvFₘ F-full ⦘ ⨾ po )                   x y → Bob x y
-    bob-la   : ( ⦗ EvL ⦘ ⨾ po ⨾ ⦗ EvA ⦘ )                      x y → Bob x y
-    bob-fld  : ( ⦗ EvR ⦘ ⨾ po ⨾ ⦗ EvFₘ F-ld ⦘ ⨾ po )           x y → Bob x y
-    bob-fst  : ( ⦗ EvW ⦘ ⨾ po ⨾ ⦗ EvFₘ F-st ⦘ ⨾ po ⨾ ⦗ EvW ⦘ ) x y → Bob x y  
-    bob-acq  : ( ⦗ EvA ∪₁ EvQ ⦘ ⨾ po )                         x y → Bob x y
-    bob-rel  : ( po ⨾ ⦗ EvL ⦘ )                                x y → Bob x y
-    -- Our proposed `amo` rules
-    bob-amoˡ : ( po ⨾ ⦗ dom ( ⦗ EvA ⦘ ⨾ amo ⨾ ⦗ EvL ⦘ ) ⦘ )   x y → Bob x y
-    bob-amoʳ : ( ⦗ codom ( ⦗ EvA ⦘ ⨾ amo ⨾ ⦗ EvL ⦘ ) ⦘ ⨾ po ) x y → Bob x y
+    bob-f   : ( po ⨾ ⦗ EvFₘ F-full ⦘ ⨾ po )                   x y → Bob x y
+    bob-la  : ( ⦗ EvL ⦘ ⨾ po ⨾ ⦗ EvA ⦘ )                      x y → Bob x y
+    bob-fld : ( ⦗ EvR ⦘ ⨾ po ⨾ ⦗ EvFₘ F-ld ⦘ ⨾ po )           x y → Bob x y
+    bob-fst : ( ⦗ EvW ⦘ ⨾ po ⨾ ⦗ EvFₘ F-st ⦘ ⨾ po ⨾ ⦗ EvW ⦘ ) x y → Bob x y
+    bob-acq : ( ⦗ EvA ∪₁ EvQ ⦘ ⨾ po )                         x y → Bob x y
+    bob-rel : ( po ⨾ ⦗ EvL ⦘ )                                x y → Bob x y
+    bob-amo : ( ⦗ codom ( ⦗ EvA ⦘ ⨾ amo ⨾ ⦗ EvL ⦘ ) ⦘ ⨾ po )  x y → Bob x y
+    -- Note: Doesn't use our other `amo` rule
+    -- bob-amoˡ : ( po ⨾ ⦗ dom ( ⦗ EvA ⦘ ⨾ amo ⨾ ⦗ EvL ⦘ ) ⦘ )   x y → Bob x y
 
   -- | Data ordered before
   data Dob (x y : Event) : Set where
@@ -222,18 +221,21 @@ module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
     dob-addr-po : ( addr ⨾ po ⨾ ⦗ EvW ⦘ )                                  x y → Dob x y
     dob-lrs     : ( ( addr ∪₂ data₋ ) ⨾ lrs )                              x y → Dob x y
 
-  -- Atomic ordered before
+  -- | Atomic ordered before
   data Aob (x y : Event) : Set where
-    aob-rmw : rmw                                      x y → Aob x y
-    aob-lrs : ( ⦗ codom rmw ⦘ ⨾ lrs ⨾ ⦗ EvA ∪₁ EvQ ⦘ ) x y → Aob x y
+    aob-rmw : rmw                            x y → Aob x y
+    -- `lrs` changed from: ( ⦗ codom rmw ⦘ ⨾ lrs ⨾ ⦗ EvA ∪₁ EvQ ⦘ ) x y → Aob x y
+    aob-lrs : ( rmw ⨾ lrs ⨾ ⦗ EvA ∪₁ EvQ ⦘ ) x y → Aob x y
 
-  -- Immediate Locally-ordered-before
+  -- | Immediate Locally-ordered-before
   data Lobi (x y : Event) : Set where
     lobi-init : ( ⦗ EvInit ⦘ ⨾ po ) x y → Lobi x y
+    -- TODO: lws is now: lws ; si
     lobi-lws  : lws                 x y → Lobi x y
     lobi-dob  : Dob                 x y → Lobi x y
     lobi-aob  : Aob                 x y → Lobi x y
     lobi-bob  : Bob                 x y → Lobi x y
+    -- missing `pob`. TODO
 
   -- Locally-ordered-before
   Lob : Rel₀ Event
@@ -241,6 +243,7 @@ module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
 
   -- Immediate Ordered before
   data Obi (x y : Event) : Set where
+    -- TODO: Obs ; si
     obi-obs : Obs x y → Obi x y
     obi-lob : Lob x y → Obi x y
 
@@ -267,9 +270,12 @@ module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
 
       -- # Armv8-specific consistency constraints
 
-      ax-coherence  : Acyclic _≡_ ( po-loc ∪₂ Ca ∪₂ rf ) -- "Internal Visibility"
+      ax-internal-rw : Irreflexive _≡_ ( ⦗ EvR ⦘ ⨾ ( po-loc ∪₂ rmw ) ⨾ ⦗ EvW ⦘ ⨾ rfi ⨾ ⦗ EvR ⦘ )
+      ax-internal-ww : Irreflexive _≡_ ( ⦗ EvW ⦘ ⨾ po-loc ⨾ ⦗ EvW ⦘ ⨾ Ca ⨾ ⦗ EvW ⦘ )
+      ax-internal-wr : Irreflexive _≡_ ( ⦗ EvW ⦘ ⨾ po-loc ⨾ ⦗ EvR ⦘ ⨾ Ca ⨾ ⦗ EvW ⦘ )
+
       ax-atomicity  : Empty₂ ( rmw ∩₂ (fre ⨾ coe) )
-      ax-global-obs : Irreflexive _≡_ Ob -- "External Visibility"
+      ax-external : Irreflexive _≡_ Ob -- "External Visibility"
 
   open IsArmv8Consistent
 
