@@ -1,7 +1,7 @@
 {-# OPTIONS --safe #-}
 
 
-module MapTCGtoArmv8Atomic where
+module MapTCGtoArmv8 where
 
 -- Stdlib imports
 open import Level using (Level; _⊔_) renaming (zero to ℓzero)
@@ -41,7 +41,6 @@ open import Arch.Armv8 as Armv8
 -- F_M_LD   ↦  DMBFF
 -- F_M_ST   ↦  DMBFF
 -- F_M_M    ↦  DMBFF
--- F_SC     ↦  DMBFF
 --
 --
 -- Corresponding event mapping:
@@ -62,13 +61,12 @@ open import Arch.Armv8 as Armv8
 -- F_MR       ↦  F_FULL
 -- F_MW       ↦  F_FULL
 -- F_MM       ↦  F_FULL
--- F_SC       ↦  F_FULL
 
 
 record TCG⇒Armv8
     (src : Execution {arch-TCG})
-    (dst : Execution {arch-Armv8})
-    (dst-a8 : Armv8Execution) : Set where
+    {dst : Execution {arch-Armv8}}
+    (dst-a8 : Armv8Execution dst) : Set where
     
   open Δ.Defs
   open TCG.LabR
@@ -134,25 +132,15 @@ record TCG⇒Armv8
       → a ∈ events src
       → ∃[ a' ] (a' ∈ events dst × EvFₘ F-st a')
 
-    -- Instrs: F_ST_LD F_ST_M F_M_LD F_M_ST F_M_M F_SC ↦ DMBFF
-    -- Events: F_WR    F_WM   F_MR   F_MW   F_MM  F_SC ↦ F
+    -- Instrs: F_ST_LD F_ST_M F_M_LD F_M_ST F_M_M ↦ DMBFF
+    -- Events: F_WR    F_WM   F_MR   F_MW   F_MM  ↦ F
     
     rule-f-full : ∀ {a : EventTCG}
       → {m : TCG.LabF}
-      → m ∈ₗ (WR ∷ WM ∷ MR ∷ MW ∷ MM ∷ SC ∷ [])
+      → m ∈ₗ (WR ∷ WM ∷ MR ∷ MW ∷ MM ∷ [])
       → EvFₜ m a
       → a ∈ events src
       → ∃[ a' ] (a' ∈ events dst × EvFₘ F-full a')
-
-    -- Instrs: F_ACQ F_REL ↦ skip
-    -- Events: F_ACQ F_REL ↦ skip
-      
-    rule-f-skip : ∀ {a : EventTCG}
-      → {m : TCG.LabF}
-      → m ∈ₗ (ACQ ∷ REL ∷ [])
-      → EvFₜ m a
-      → a ∈ events src
-      → ∃[ a' ] (a' ∈ events dst × EvSkip a')
       
 
 private
@@ -165,7 +153,7 @@ private
 
 
 -- Armv8 programs mapped from TCG can only contain:
--- Rᵣ Wᵣ Aₗ Lₗ F_LD F_ST F_FULL
+-- Rᵣ Wᵣ Aₐ Lₐ F_LD F_ST F_FULL
 data IsArmv8EventTCG : Pred₀ EventArmv8 where
   ev-init : IsArmv8EventTCG (event-init uid loc val)
   ev-skip : IsArmv8EventTCG (event-skip uid tid)
@@ -176,9 +164,9 @@ data IsArmv8EventTCG : Pred₀ EventArmv8 where
   ev-f    : IsArmv8EventTCG (event-f uid tid (lab-f mode))
 
 
-record Armv8-TCGRestricted (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) : Set₁ where
+record Armv8-TCGRestricted {ex : Execution {arch-Armv8}} (a8 : Armv8Execution ex) : Set₁ where
   open Δ.Restrict ex
-  open Armv8.Relations ex a8
+  open Armv8.Relations a8
   open Armv8Execution a8
   
   field
@@ -190,18 +178,14 @@ record Armv8-TCGRestricted (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) :
     -- /instruction level/, it is obvious where /instructions/ in the target come from.
     -- However, as the instructions are absent in our model, we annotate events accordingly.
 
-    -- Full fences in Armv8 can be produced from WR / WM / MR / MW / MM / SC fences in TCG
-    org-f-wr org-f-wm org-f-mr org-f-mw org-f-mm org-f-sc : Pred₀ EventArmv8
+    -- Full fences in Armv8 can be produced from WR / WM / MR / MW / MM fences in TCG
+    org-f-wr org-f-wm org-f-mr org-f-mw org-f-mm : Pred₀ EventArmv8
 
     -- Load fences in Armv8 can be produced from RR / RW / RW fences in TCG
     org-ld-rr org-ld-rw org-ld-rm : Pred₀ EventArmv8
-
-    -- Skip events in Armv8 can be produced from either:
-    -- * skips in TCG
-    -- * ACQ / REL fences in TCG
-    org-skip-skip org-skip-acq org-skip-rel : Pred₀ EventArmv8
     
     -- Store fences can only be created from `WW` fences. No need to keep track
+    -- Skips can only be created from skips. No need to keep track
 
 
     unique-org-f-wr : UniquePred org-f-wr
@@ -209,31 +193,24 @@ record Armv8-TCGRestricted (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) :
     unique-org-f-mr : UniquePred org-f-mr
     unique-org-f-mw : UniquePred org-f-mw
     unique-org-f-mm : UniquePred org-f-mm
-    unique-org-f-sc : UniquePred org-f-sc
 
     unique-org-ld-rr : UniquePred org-ld-rr
     unique-org-ld-rw : UniquePred org-ld-rw
     unique-org-ld-rm : UniquePred org-ld-rm
 
-    unique-org-skip-skip : UniquePred org-skip-skip
-    unique-org-skip-acq  : UniquePred org-skip-acq
-    unique-org-skip-rel  : UniquePred org-skip-rel
-
-    org-f-def    : (events ∩₁ EvFₘ F-full) ⇔₁ (org-f-wr ∪₁ org-f-wm ∪₁ org-f-mr ∪₁ org-f-mw ∪₁ org-f-mm ∪₁ org-f-sc)
+    org-f-def    : (events ∩₁ EvFₘ F-full) ⇔₁ (org-f-wr ∪₁ org-f-wm ∪₁ org-f-mr ∪₁ org-f-mw ∪₁ org-f-mm)
     org-ld-def   : (events ∩₁ EvFₘ F-ld) ⇔₁ (org-ld-rr ∪₁ org-ld-rw ∪₁ org-ld-rm)
-    org-skip-def : (events ∩₁ EvSkip) ⇔₁ (org-skip-skip ∪₁ org-skip-acq ∪₁ org-skip-rel)
 
     -- All `rmw` relations are over `amo` by the /atomic/ mapping
     no-lxsx : Empty₂ lxsx
 
-    disjoint-f    : PairwiseDisjoint₁ (org-f-wr ∷ org-f-wm ∷ org-f-mr ∷ org-f-mw ∷ org-f-mm ∷ org-f-sc ∷ [])
+    disjoint-f    : PairwiseDisjoint₁ (org-f-wr ∷ org-f-wm ∷ org-f-mr ∷ org-f-mw ∷ org-f-mm ∷ [])
     disjoint-ld   : PairwiseDisjoint₁ (org-ld-rr ∷ org-ld-rw ∷ org-ld-rm ∷ [])
-    disjoint-skip : PairwiseDisjoint₁ (org-skip-skip ∷ org-skip-acq ∷ org-skip-rel ∷ [])
 
 
 -- # Helpers
 
-module _ {ex : Execution {arch-Armv8}} {a8 : Armv8Execution} (ex-res : Armv8-TCGRestricted ex a8) where
+module _ {ex : Execution {arch-Armv8}} {a8 : Armv8Execution ex} (ex-res : Armv8-TCGRestricted a8) where
 
   open import Relation.Binary.PropositionalEquality using (refl)
   open import Data.Empty using (⊥-elim)

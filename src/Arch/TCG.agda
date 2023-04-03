@@ -1,18 +1,19 @@
 {-# OPTIONS --safe #-}
 
+
 module Arch.TCG where
 
 -- Stdlib imports
 import Relation.Binary.PropositionalEquality as Eq
 open Eq using (_≡_; _≢_; refl)
-open import Function using (_∘_)
-open import Data.Product using (_,_; _×_; proj₁; ∃-syntax)
+open import Function using (_∘_; flip)
+open import Data.Product using (_,_; _×_; proj₁; proj₂; ∃-syntax)
 open import Data.Empty using (⊥-elim)
-open import Data.Sum using (inj₁; inj₂)
+open import Data.Sum using (inj₁; inj₂; swap) renaming ([_,_] to ⊎[_,_])
 open import Relation.Nullary using (¬_; yes; no)
 open import Relation.Unary using (Pred; Empty; _∈_)
-open import Relation.Binary using (Rel; Irreflexive)
-open import Relation.Binary.Construct.Closure.Transitive using (TransClosure)
+open import Relation.Binary using (Rel; Irreflexive; Reflexive; Transitive; Symmetric; IsEquivalence)
+open import Relation.Binary.Construct.Closure.Transitive using (TransClosure; _∷_; [_])
 -- Local library imports
 open import Dodo.Nullary
 open import Dodo.Unary
@@ -50,10 +51,6 @@ data LabF : Set where
   -- represents a fence ordering *preceding reads* with *subsequent writes*.
   _𝐹_ : AccessClass → AccessClass → LabF
 
-  ACQ : LabF -- acquire (does nothing - see also `Arch.TCG.Detour`)
-  REL : LabF -- release (does nothing - see also `Arch.TCG.Detour`)
-  SC  : LabF -- Full Fence (Sequentially Consistent)
-
 
 -- # Lemmas/Properties
 
@@ -85,21 +82,6 @@ lab-f-dec≡ (l₁ 𝐹 r₁) (l₂ 𝐹 r₂) =
   cong₂-dec _𝐹_
     (λ{refl → refl}) (λ{refl → refl})
     (access-class-dec≡ l₁ l₂) (access-class-dec≡ r₁ r₂)
-lab-f-dec≡ ACQ       ACQ = yes refl
-lab-f-dec≡ REL       REL = yes refl
-lab-f-dec≡ SC        SC  = yes refl
-lab-f-dec≡ ACQ       (_ 𝐹 _) = no (λ())
-lab-f-dec≡ ACQ       REL     = no (λ())
-lab-f-dec≡ ACQ       SC      = no (λ())
-lab-f-dec≡ REL       (_ 𝐹 _) = no (λ())
-lab-f-dec≡ REL       ACQ     = no (λ())
-lab-f-dec≡ REL       SC      = no (λ())
-lab-f-dec≡ SC        (_ 𝐹 _) = no (λ())
-lab-f-dec≡ SC        ACQ     = no (λ())
-lab-f-dec≡ SC        REL     = no (λ())
-lab-f-dec≡ (_ 𝐹 _)   ACQ     = no (λ())
-lab-f-dec≡ (_ 𝐹 _)   REL     = no (λ())
-lab-f-dec≡ (_ 𝐹 _)   SC      = no (λ())
 
 arch-TCG : Arch
 arch-TCG =
@@ -132,9 +114,29 @@ open Π.Ev arch-TCG
 EventTCG = Event -- note that this is parameterized over `arch-TCG`
 
 
-module Relations (ex : Execution {arch-TCG}) where
+record TCGExecution (ex : Execution {arch-TCG}) : Set₁ where
+  open Execution ex
+  field
+    -- # Definitions
+    
+    si : Rel₀ Event -- ^ Same Instruction relation
+
+
+    -- # Wellformedness
+
+    si-internal : si ⊆₂ (po ∪₂ flip po ∪₂ ⦗ events ⦘)
+    -- basically, `si` is an equivalence relation.
+    -- note that the `filter-rel events` is crucial here. otherwise we can prove
+    -- false. pick an `x` ∉ events, construct `si x x`, construct `po x x` (with
+    -- `si-internal`), construct `x ∈ events` (with `po-elements`). tada, ⊥.
+    si-refl  : Reflexive (filter-rel events si)
+    si-trans : Transitive si
+    si-sym   : Symmetric si
+    
+module Relations {ex : Execution {arch-TCG}} (tex : TCGExecution ex) where
 
   open Π.Defs ex
+  open TCGExecution tex
 
 
   -- | Events ordered across the program order (po).
@@ -147,7 +149,7 @@ module Relations (ex : Execution {arch-TCG}) where
   -- This data structure is much easier to handle than taking _∪₂_ over all these,
   -- as constructing (or pattern-matching on) an instance looks like: inj₁ (inj₁ (inj₁ ...)))
   data Ord (x y : Event) : Set where
-    ord-init      : ( ⦗ EvInit ⦘ ⨾ po ) x y → Ord x y
+    ord-init      : ( ⦗ EvInit ⦘ ⨾ po ⨾ ⦗ EvRW ⦘ ) x y → Ord x y
 
     -- memory fences
 
@@ -164,30 +166,22 @@ module Relations (ex : Execution {arch-TCG}) where
     ord-mm        : ( ⦗ EvRW ⦘ ⨾ po ⨾ ⦗ EvFₜ MM ⦘ ⨾ po ⨾ ⦗ EvRW ⦘ ) x y → Ord x y
 
 
-    -- other fences
-
-    ord-acq       : ( ⦗ EvFₜ ACQ ⦘ ⨾ po ) x y → Ord x y
-    ord-rel       : ( po ⨾ ⦗ EvFₜ REL ⦘ ) x y → Ord x y
-
-    ord-sc₁       : ( po ⨾ ⦗ EvFₜ SC ⦘ ) x y → Ord x y
-    ord-sc₂       : ( ⦗ EvFₜ SC ⦘ ⨾ po ) x y → Ord x y
-
-
     -- other ordering operations
 
-    ord-rmw-dom   : ( po ⨾ ⦗ dom rmw ⦘ )   x y → Ord x y
-    ord-rmw-codom : ( ⦗ codom rmw ⦘ ⨾ po ) x y → Ord x y
+    -- ord-rmw-dom   : ( po ⨾ ⦗ dom rmw ⦘ )   x y → Ord x y
+    ord-rmw-codom : ( ⦗ codom rmw ⦘ ⨾ po ⨾ ⦗ EvRW ⦘ ) x y → Ord x y
 
-    ord-w         : ( po ⨾ ⦗ EvWₜ trmw ⦘ ) x y → Ord x y
-    ord-r         : ( ⦗ EvRₜ trmw ⦘ ⨾ po ) x y → Ord x y
+    ord-w         : ( ⦗ EvRW ⦘ ⨾ po ⨾ ⦗ EvWₐ ⦘ ) x y → Ord x y
+    ord-r         : ( ⦗ EvRₐ ⦘ ⨾ po ⨾ ⦗ EvRW ⦘ ) x y → Ord x y
 
 
   -- | Immediate global happens before. (See `ghb` below)
   data Ghbi (x y : Event) : Set where
     ghbi-ord : Ord x y → Ghbi x y
-    ghbi-rfe : rfe x y → Ghbi x y
-    ghbi-coe : coe x y → Ghbi x y
-    ghbi-fre : fre x y → Ghbi x y
+    -- these three cases are the same as the new Arm case `Obs ⨾ si`
+    ghbi-rfe : ( rfe ⨾ si ) x y → Ghbi x y
+    ghbi-coe : ( coe ⨾ si ) x y → Ghbi x y
+    ghbi-fre : ( fre ⨾ si ) x y → Ghbi x y
 
   -- | Coherence
   data Coh (x y : Event) : Set where
@@ -204,16 +198,48 @@ module Relations (ex : Execution {arch-TCG}) where
 
   record IsTCGConsistent : Set where
     field
+      -- # TCG-specific consistency constraints
+
       ax-coherence  : Acyclic _≡_ Coh
       ax-atomicity  : Empty₂ (rmw ∩₂ (fre ⨾ coe))
       ax-global-ord : Irreflexive _≡_ ghb
 
 
-module Properties {ex : Execution {arch-TCG}} (wf : WellFormed ex) where
+module Properties {ex : Execution {arch-TCG}}
+  (tex : TCGExecution ex)
+  (wf : WellFormed ex)
+  where
 
-  open Relations ex
+  open Relations tex
   open Π.Defs ex
   open Π.WfDefs wf
+  open TCGExecution tex
+
+
+  si-elements : udr si ⇔₁ events
+  si-elements = ⇔: proof-⊆ proof-⊇
+    where
+    proof-⊆ : udr si ⊆₁' events
+    proof-⊆ x (opt₁ (y , si[xy])) with ⊆₂-apply si-internal si[xy]
+    ... | opt₁ po[xy] = poˡ∈ex po[xy]
+    ... | opt₂ po[yx] = poʳ∈ex po[yx]
+    ... | opf₃ (_ , x∈ex) = x∈ex
+    proof-⊆ y (opf₂ (x , si[xy])) with ⊆₂-apply si-internal si[xy]
+    ... | opt₁ po[xy] = poʳ∈ex po[xy]
+    ... | opt₂ po[yx] = poˡ∈ex po[yx]
+    ... | opf₃ (refl , x∈ex) = x∈ex
+
+    proof-⊇ : events ⊆₁' udr si
+    proof-⊇ x x∈ex =
+      let si[xx] = si-refl {with-pred x x∈ex}
+      in opt₁ (x , si[xx])
+
+  siˡ∈ex : si ˡ∈ex
+  siˡ∈ex = ⇔₁-apply-⊆₁ si-elements ∘ inj₁ ∘ (_ ,_)
+  
+  siʳ∈ex : si ʳ∈ex
+  siʳ∈ex = ⇔₁-apply-⊆₁ si-elements ∘ inj₂ ∘ (_ ,_)
+  
 
   coh-irreflexive : Irreflexive _≡_ Coh
   coh-irreflexive refl (coh-po-loc (po[xx] , _)) = po-irreflexive refl po[xx]
@@ -245,7 +271,7 @@ module Properties {ex : Execution {arch-TCG}} (wf : WellFormed ex) where
     → Ord x y
       -------------
     → po x y
-  ord⇒po (ord-init ((refl , _) ⨾[ _ ]⨾ po[xy])) = po[xy]
+  ord⇒po (ord-init ((refl , _) ⨾[ _ ]⨾ po[xy] ⨾[ _ ]⨾ (refl , _))) = po[xy]
   ord⇒po (ord-rr rr[xy]) = ord-f⇒po rr[xy]
   ord⇒po (ord-rw rw[xy]) = ord-f⇒po rw[xy]
   ord⇒po (ord-rm rm[xy]) = ord-f⇒po rm[xy]
@@ -255,14 +281,9 @@ module Properties {ex : Execution {arch-TCG}} (wf : WellFormed ex) where
   ord⇒po (ord-mr mr[xy]) = ord-f⇒po mr[xy]
   ord⇒po (ord-mw mw[xy]) = ord-f⇒po mw[xy]
   ord⇒po (ord-mm mm[xy]) = ord-f⇒po mm[xy]
-  ord⇒po (ord-acq ((refl , _) ⨾[ _ ]⨾ po[xy]))       = po[xy]
-  ord⇒po (ord-rel (po[xy] ⨾[ _ ]⨾ (refl , _)))       = po[xy]
-  ord⇒po (ord-sc₁ (po[xy] ⨾[ _ ]⨾ (refl , _)))       = po[xy]
-  ord⇒po (ord-sc₂ ((refl , _) ⨾[ _ ]⨾ po[xy]))       = po[xy]
-  ord⇒po (ord-rmw-dom (po[xy] ⨾[ _ ]⨾ (refl , _)))   = po[xy]
-  ord⇒po (ord-rmw-codom ((refl , _) ⨾[ _ ]⨾ po[xy])) = po[xy]
-  ord⇒po (ord-w (po[xy] ⨾[ _ ]⨾ (refl , _)))         = po[xy]
-  ord⇒po (ord-r ((refl , _) ⨾[ _ ]⨾ po[xy]))         = po[xy]
+  ord⇒po (ord-rmw-codom ((refl , _) ⨾[ _ ]⨾ po[xy] ⨾[ _ ]⨾ (refl , _))) = po[xy]
+  ord⇒po (ord-w ((refl , _) ⨾[ _ ]⨾ po[xy] ⨾[ _ ]⨾ (refl , _)))         = po[xy]
+  ord⇒po (ord-r ((refl , _) ⨾[ _ ]⨾ po[xy] ⨾[ _ ]⨾ (refl , _)))         = po[xy]
 
   ord⁺⇒po : {x y : Event} → TransClosure Ord x y → po x y
   ord⁺⇒po = ⁺-join-trans po-trans ∘ (⁺-map (λ τ → τ) ord⇒po)
@@ -285,11 +306,14 @@ module Properties {ex : Execution {arch-TCG}} (wf : WellFormed ex) where
   ord-irreflexive : Irreflexive _≡_ Ord
   ord-irreflexive refl = po-irreflexive refl ∘ ord⇒po
 
-  ghbi-irreflexive : Irreflexive _≡_ Ghbi
-  ghbi-irreflexive refl (ghbi-ord ord[xx]) = ord-irreflexive refl ord[xx]
-  ghbi-irreflexive refl (ghbi-rfe rfe[xx]) = rf-irreflexive refl (proj₁ rfe[xx])
-  ghbi-irreflexive refl (ghbi-coe coe[xx]) = co-irreflexive refl (proj₁ coe[xx])
-  ghbi-irreflexive refl (ghbi-fre fre[xx]) = fr-irreflexive refl (proj₁ fre[xx])
+  -- ghbi-irreflexive : Irreflexive _≡_ Ghbi
+  -- ghbi-irreflexive refl (ghbi-ord ord[xx]) = ord-irreflexive refl ord[xx]
+  -- ghbi-irreflexive refl (ghbi-rfe (rfe[xy] ⨾[ _ ]⨾ si[yx])) =
+  --   proj₂ rfe[xy] (swap (⊆₂-apply si-internal si[yx]))
+  -- ghbi-irreflexive refl (ghbi-coe (coe[xy] ⨾[ _ ]⨾ si[yx])) =
+  --   proj₂ coe[xy] (swap (⊆₂-apply si-internal si[yx]))
+  -- ghbi-irreflexive refl (ghbi-fre (fre[xy] ⨾[ _ ]⨾ si[yx])) =
+  --   proj₂ fre[xy] (swap (⊆₂-apply si-internal si[yx]))
 
 
   ordˡ∈ex : Ord ˡ∈ex
@@ -301,12 +325,12 @@ module Properties {ex : Execution {arch-TCG}} (wf : WellFormed ex) where
 
   ghbiˡ∈ex : Ghbi ˡ∈ex
   ghbiˡ∈ex (ghbi-ord ord[xy]) = ordˡ∈ex ord[xy]
-  ghbiˡ∈ex (ghbi-rfe rfe[xy]) = rfˡ∈ex (proj₁ rfe[xy])
-  ghbiˡ∈ex (ghbi-coe coe[xy]) = coˡ∈ex (proj₁ coe[xy])
-  ghbiˡ∈ex (ghbi-fre fre[xy]) = frˡ∈ex (proj₁ fre[xy])
+  ghbiˡ∈ex (ghbi-rfe (rfe[xy] ⨾[ _ ]⨾ _)) = rfˡ∈ex (proj₁ rfe[xy])
+  ghbiˡ∈ex (ghbi-coe (coe[xy] ⨾[ _ ]⨾ _)) = coˡ∈ex (proj₁ coe[xy])
+  ghbiˡ∈ex (ghbi-fre (fre[xy] ⨾[ _ ]⨾ _)) = frˡ∈ex (proj₁ fre[xy])
 
   ghbiʳ∈ex : Ghbi ʳ∈ex
   ghbiʳ∈ex (ghbi-ord ord[xy]) = ordʳ∈ex ord[xy]
-  ghbiʳ∈ex (ghbi-rfe rfe[xy]) = rfʳ∈ex (proj₁ rfe[xy])
-  ghbiʳ∈ex (ghbi-coe coe[xy]) = coʳ∈ex (proj₁ coe[xy])
-  ghbiʳ∈ex (ghbi-fre fre[xy]) = frʳ∈ex (proj₁ fre[xy])
+  ghbiʳ∈ex (ghbi-rfe (_ ⨾[ _ ]⨾ si[yx])) = siʳ∈ex si[yx]
+  ghbiʳ∈ex (ghbi-coe (_ ⨾[ _ ]⨾ si[yx])) = siʳ∈ex si[yx]
+  ghbiʳ∈ex (ghbi-fre (_ ⨾[ _ ]⨾ si[yx])) = siʳ∈ex si[yx]

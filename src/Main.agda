@@ -86,13 +86,13 @@ open import Arch.TCG
 -- # Architecture mapping proofs
 
 -- ## x86 ⇒ TCG
-import MapX86toTCG                        -- specification
-import Proof.Mapping.X86toTCG             -- proof
+import MapX86toTCG             -- specification
+-- import Proof.Mapping.X86toTCG  -- proof
 
--- ## TCG ⇒ Armv8, /without/ atomic Compare-And-Swap instruction
-import MapTCGtoArmv8NonAtomic             -- specification
-import Proof.Mapping.TCGtoArmv8NonAtomic  -- proof
+-- ## TCG ⇒ Armv8 (with atomic Compare-And-Swap instruction)
+import MapTCGtoArmv8             -- specification
+import Proof.Mapping.TCGtoArmv8  -- proof
 
--- ## TCG ⇒ Armv8, /with/ atomic Compare-And-Swap instruction
-import MapTCGtoArmv8Atomic                -- specification
-import Proof.Mapping.TCGtoArmv8Atomic     -- proof
+-- ## TCG ⇒ RISC-V
+import MapTCGtoRISCV             -- specification
+import Proof.Mapping.TCGtoRISCV  -- proof

@@ -4,14 +4,14 @@
 open import Burrow.Template.Mapping as Δ
 -- Local imports
 open import Arch.Armv8 using (arch-Armv8; Armv8Execution)
-open import MapTCGtoArmv8Atomic using (Armv8-TCGRestricted)
+open import MapTCGtoArmv8 using (Armv8-TCGRestricted)
 
 
-module Proof.Mapping.TCGtoArmv8Atomic.Mapping
+module Proof.Mapping.TCGtoArmv8.Mapping
   {dst : Execution {arch-Armv8}}
-  (dst-a8 : Armv8Execution)
+  {dst-a8 : Armv8Execution dst}
   (dst-wf : WellFormed dst)
-  (dst-ok : Armv8-TCGRestricted dst dst-a8)
+  (dst-ok : Armv8-TCGRestricted dst-a8)
   where
   
 -- Stdlib imports
@@ -29,9 +29,9 @@ open import Arch.Armv8 as Armv8
 open import Arch.TCG as TCG
 
 
-open import MapTCGtoArmv8Atomic -- defines the stuff we're proving
+open import MapTCGtoArmv8 -- defines the stuff we're proving
 
-open import Proof.Mapping.TCGtoArmv8Atomic.Execution dst-a8 dst-wf dst-ok as Ex -- defines δ
+open import Proof.Mapping.TCGtoArmv8.Execution dst-wf dst-ok as Ex -- defines δ
 open Ex.Extra
 
 open Δ.Consistency δ
@@ -137,28 +137,15 @@ src-rule-f-st a-f a∈src =
 
 src-rule-f-full : ∀ {a : EventTCG}
   → {m : TCG.LabF}
-  → m ∈ₗ (WR ∷ WM ∷ MR ∷ MW ∷ MM ∷ SC ∷ [])
+  → m ∈ₗ (WR ∷ WM ∷ MR ∷ MW ∷ MM ∷ [])
   → EvFₜ m a
   → a ∈ events src
   → ∃[ a' ] (a' ∈ events dst × EvFₘ F-full a')
 src-rule-f-full p a-f a∈src =
   ev[⇒] a∈src , events[⇒] a∈src , F[⇒]ff p a∈src a-f
-  
-
--- Instrs: F_ACQ F_REL ↦ skip
--- Events: F_ACQ F_REL ↦ skip
-
-src-rule-f-skip : ∀ {a : EventTCG}
-  → {m : TCG.LabF}
-  → m ∈ₗ (ACQ ∷ REL ∷ [])
-  → EvFₜ m a
-  → a ∈ events src
-  → ∃[ a' ] (a' ∈ events dst × EvSkip a')
-src-rule-f-skip p a-f a∈src =
-  ev[⇒] a∈src , events[⇒] a∈src , F[⇒]skip p a∈src a-f
 
 
-mapping : TCG⇒Armv8 src dst dst-a8
+mapping : TCG⇒Armv8 src dst-a8
 mapping =
   record
     { rule-ld        = src-rule-ld
@@ -170,5 +157,4 @@ mapping =
     ; rule-f-ld      = src-rule-f-ld
     ; rule-f-st      = src-rule-f-st
     ; rule-f-full    = src-rule-f-full
-    ; rule-f-skip    = src-rule-f-skip
     }

@@ -9,11 +9,11 @@ module Arch.Armv8 where
 import Relation.Binary.PropositionalEquality as Eq
 open Eq using (_≡_; refl) renaming (sym to ≡-sym)
 open import Data.Product using (_,_; ∃-syntax)
-open import Data.Sum using (inj₁; inj₂)
-open import Function using (_∘_)
+open import Data.Sum using (inj₁; inj₂) renaming ([_,_] to ⊎[_,_])
+open import Function using (_∘_; flip)
 open import Relation.Nullary using (¬_; yes; no)
 open import Relation.Unary using (Pred; Empty)
-open import Relation.Binary using (Rel; Irreflexive)
+open import Relation.Binary using (Rel; Irreflexive; Reflexive; Symmetric; Transitive)
 open import Relation.Binary.Construct.Closure.Transitive using (TransClosure; [_]; _∷_)
 -- Local library imports
 open import Dodo.Nullary
@@ -150,7 +150,8 @@ EvFₘ : F-mode → Pred₀ Event
 EvFₘ = EvFₜ ∘ lab-f
 
 
-record Armv8Execution : Set₁ where
+record Armv8Execution (ex : Execution {arch-Armv8}) : Set₁ where
+  open Execution ex
   field
     -- # Armv8-specific relations
 
@@ -158,15 +159,39 @@ record Armv8Execution : Set₁ where
     addr  : Rel₀ Event
     ctrl  : Rel₀ Event
 
+    si : Rel₀ Event -- ^ Same Instruction relation
+
     -- rmw relation that is created by single-instruction RMWs
     amo  : Rel₀ Event
     -- rmw relation that is created by load-linked/store-conditional RMWs.
     lxsx : Rel₀ Event
 
 
--- open import Burrow.Execution {arch-Armv8} using (Execution)
+    -- # Armv8-specific wellformedness axioms
 
-module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
+    si-internal : si ⊆₂ (po ∪₂ flip po ∪₂ ⦗ events ⦘)
+    -- basically, `si` is an equivalence.
+    -- note that the `filter-rel events` is crucial here. otherwise we can prove
+    -- false. pick an `x` ∉ events, construct `si x x`, construct `po x x` (with
+    -- `si-internal`), construct `x ∈ events` (with `po-elements`). tada, ⊥.
+    si-refl  : Reflexive (filter-rel events si)
+    si-trans : Transitive si
+    si-sym   : Symmetric si
+
+    -- The `rmw` relation is obtained either by atomic read-modify-write instructions (amo)
+    -- or load-linked/store-conditional instruction pairs.
+    amo-lxsx-def : rmw  ⇔₂  amo ∪₂ lxsx
+
+    data-def₁ : data₋ ⊆₂ EvR ×₂ EvW
+    data-def₂ : data₋ ⊆₂ po
+    addr-def₁ : addr  ⊆₂ EvR ×₂ ( EvR ∪₁ EvW )
+    addr-def₂ : addr  ⊆₂ po
+    ctrl-def₁ : ctrl  ⊆₂ EvR ×₂ EvE
+    ctrl-def₂ : ctrl  ⊆₂ po
+    ctrl-def₃ : ( ctrl ⨾ po ) ⊆₂ ctrl
+
+
+module Relations {ex : Execution {arch-Armv8}} (a8 : Armv8Execution ex) where
 
   open Π.Defs ex
   open Armv8Execution a8
@@ -190,10 +215,18 @@ module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
     ca-co : co x y → Ca x y -- w × w
     ca-fr : fr x y → Ca x y -- r × w . rf⁻¹;co
 
+  -- | External coherence after
+  cae : Rel₀ Event
+  cae = external Ca
+
   -- | Observed by
+  --
+  -- The cat model basically formulates this as `(rf | ca) & ext`. Which we make:
+  --   `(rf & ext) | (ca & ext)`, which is the same.
   data Obs (x y : Event) : Set where
     obs-rfe : rfe x y → Obs x y
-    obs-ca  : Ca  x y → Obs x y
+    -- this used to be `fre ∪₂ coe`
+    obs-cae : cae x y → Obs x y
 
   -- | Barrier-ordered-before
   --
@@ -209,7 +242,7 @@ module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
     bob-acq : ( ⦗ EvA ∪₁ EvQ ⦘ ⨾ po )                         x y → Bob x y
     bob-rel : ( po ⨾ ⦗ EvL ⦘ )                                x y → Bob x y
     bob-amo : ( ⦗ codom ( ⦗ EvA ⦘ ⨾ amo ⨾ ⦗ EvL ⦘ ) ⦘ ⨾ po )  x y → Bob x y
-    -- Note: Doesn't use our other `amo` rule
+    -- Note: Doesn't use our other `amo` rule. (It's likely redundant anyway)
     -- bob-amoˡ : ( po ⨾ ⦗ dom ( ⦗ EvA ⦘ ⨾ amo ⨾ ⦗ EvL ⦘ ) ⦘ )   x y → Bob x y
 
   -- | Data ordered before
@@ -217,6 +250,10 @@ module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
     dob-addr    : addr                                                     x y → Dob x y
     dob-data    : data₋                                                    x y → Dob x y
     dob-ctrl    : ( ctrl ⨾ ⦗ EvW ⦘ )                                       x y → Dob x y
+    -- The are somewhat differently formulated in the cat model
+    -- * `CSE-ob; [R]`, which is: `[R]; ctrl; [ISB]; po?; [R]`, which becomes our:
+    --     `ctrl; [ISB]; po; [R]`
+    -- * (addr; po); [ISB]; po; [R]
     dob-isb     : ( ( ctrl ∪₂ ( addr ⨾ po ) ) ⨾ ⦗ EvISB ⦘ ⨾ po ⨾ ⦗ EvR ⦘ ) x y → Dob x y
     dob-addr-po : ( addr ⨾ po ⨾ ⦗ EvW ⦘ )                                  x y → Dob x y
     dob-lrs     : ( ( addr ∪₂ data₋ ) ⨾ lrs )                              x y → Dob x y
@@ -230,12 +267,10 @@ module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
   -- | Immediate Locally-ordered-before
   data Lobi (x y : Event) : Set where
     lobi-init : ( ⦗ EvInit ⦘ ⨾ po ) x y → Lobi x y
-    -- TODO: lws is now: lws ; si
-    lobi-lws  : lws                 x y → Lobi x y
+    lobi-lws  : ( lws ⨾ si )        x y → Lobi x y
     lobi-dob  : Dob                 x y → Lobi x y
     lobi-aob  : Aob                 x y → Lobi x y
     lobi-bob  : Bob                 x y → Lobi x y
-    -- missing `pob`. TODO
 
   -- Locally-ordered-before
   Lob : Rel₀ Event
@@ -243,9 +278,10 @@ module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
 
   -- Immediate Ordered before
   data Obi (x y : Event) : Set where
-    -- TODO: Obs ; si
-    obi-obs : Obs x y → Obi x y
-    obi-lob : Lob x y → Obi x y
+    obi-obs : ( Obs ⨾ si ) x y → Obi x y
+    obi-lob : Lob          x y → Obi x y
+    -- this one is new. note: `fre ≡ [R]; fre; [W]`
+    obi-fre : ( ⦗ EvR ⦘ ⨾ po-loc ⨾ fre ⨾ si ) x y → Obi x y
 
   -- Ordered before
   Ob : Rel₀ Event
@@ -254,36 +290,49 @@ module Relations (ex : Execution {arch-Armv8}) (a8 : Armv8Execution) where
 
   record IsArmv8Consistent : Set where
     field
-      -- # Armv8-specific relations
-
-      -- The `rmw` relation is obtained either by atomic read-modify-write instructions (amo)
-      -- or load-linked/store-conditional instruction pairs.
-      amo-lxsx-def : rmw  ⇔₂  amo ∪₂ lxsx
-
-      data-def₁ : data₋ ⊆₂ EvR ×₂ EvW
-      data-def₂ : data₋ ⊆₂ po
-      addr-def₁ : addr  ⊆₂ EvR ×₂ ( EvR ∪₁ EvW )
-      addr-def₂ : data₋ ⊆₂ po
-      ctrl-def₁ : ctrl  ⊆₂ EvR ×₂ EvE
-      ctrl-def₂ : ctrl  ⊆₂ po
-      ctrl-def₃ : ( ctrl ⨾ po ) ⊆₂ ctrl
-
       -- # Armv8-specific consistency constraints
 
+      -- this one is redundant, as it's in `po`, which is irreflexive already
       ax-internal-rw : Irreflexive _≡_ ( ⦗ EvR ⦘ ⨾ ( po-loc ∪₂ rmw ) ⨾ ⦗ EvW ⦘ ⨾ rfi ⨾ ⦗ EvR ⦘ )
       ax-internal-ww : Irreflexive _≡_ ( ⦗ EvW ⦘ ⨾ po-loc ⨾ ⦗ EvW ⦘ ⨾ Ca ⨾ ⦗ EvW ⦘ )
       ax-internal-wr : Irreflexive _≡_ ( ⦗ EvW ⦘ ⨾ po-loc ⨾ ⦗ EvR ⦘ ⨾ Ca ⨾ ⦗ EvW ⦘ )
 
-      ax-atomicity  : Empty₂ ( rmw ∩₂ (fre ⨾ coe) )
-      ax-external : Irreflexive _≡_ Ob -- "External Visibility"
+      ax-atomicity : Empty₂ ( rmw ∩₂ (fre ⨾ coe) )
+      ax-external  : Irreflexive _≡_ Ob -- "External Visibility"
 
   open IsArmv8Consistent
 
 
-  -- # Helpers
+module Properties {ex : Execution {arch-Armv8}}
+  (a8 : Armv8Execution ex)
+  (wf : WellFormed ex)
+  where
 
-  amo-def : IsArmv8Consistent → amo ⊆₂ rmw
-  amo-def = ∪₂-elimʳ-⊆₂ ∘ ⇔₂-to-⊇₂ ∘ amo-lxsx-def
+  open Relations a8
+  open Π.Defs ex
+  open Π.WfDefs wf
+  open Armv8Execution a8
 
-  lxsx-def : IsArmv8Consistent → lxsx ⊆₂ rmw
-  lxsx-def = ∪₂-elimˡ-⊆₂ ∘ ⇔₂-to-⊇₂ ∘ amo-lxsx-def
+  si-elements : udr si ⇔₁ events
+  si-elements = ⇔: proof-⊆ proof-⊇
+    where
+    proof-⊆ : udr si ⊆₁' events
+    proof-⊆ x (opt₁ (y , si[xy])) with ⊆₂-apply si-internal si[xy]
+    ... | opt₁ po[xy] = poˡ∈ex po[xy]
+    ... | opt₂ po[yx] = poʳ∈ex po[yx]
+    ... | opf₃ (refl , x∈src) = x∈src
+    proof-⊆ y (opf₂ (x , si[xy])) with ⊆₂-apply si-internal si[xy]
+    ... | opt₁ po[xy] = poʳ∈ex po[xy]
+    ... | opt₂ po[yx] = poˡ∈ex po[yx]
+    ... | opf₃ (refl , x∈src) = x∈src
+
+    proof-⊇ : events ⊆₁' udr si
+    proof-⊇ x x∈ex =
+      let si[xx] = si-refl {with-pred x x∈ex}
+      in opt₁ (x , si[xx])
+
+  siˡ∈ex : si ˡ∈ex
+  siˡ∈ex = ⇔₁-apply-⊆₁ si-elements ∘ inj₁ ∘ (_ ,_)
+
+  siʳ∈ex : si ʳ∈ex
+  siʳ∈ex = ⇔₁-apply-⊆₁ si-elements ∘ inj₂ ∘ (_ ,_)
