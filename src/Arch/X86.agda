@@ -71,27 +71,14 @@ open Π.Ev arch-x86
 
 EventX86 = Event -- note that this is parametrized over `arch-x86`
 
-record X86Execution (ex : Execution {arch-x86}) : Set₁ where
-  open Execution ex
-  field
-    si : Rel₀ Event
 
-    -- # X86-specific wellformedness axioms
-
-    si-internal : si ⊆₂ (po ∪₂ flip po ∪₂ ⦗ events ⦘)
-    -- basically, `si` is an equivalence.
-    -- note that the `filter-rel events` is crucial here. otherwise we can prove
-    -- false. pick an `x` ∉ events, construct `si x x`, construct `po x x` (with
-    -- `si-internal`), construct `x ∈ events` (with `po-elements`). tada, ⊥.
-    si-refl  : Reflexive (filter-rel events si)
-    si-trans : Transitive si
-    si-sym   : Symmetric si
+open import Arch.Mixed as Mixed using (MixedExecution)
 
 
-module Relations {ex : Execution {arch-x86}} (xex : X86Execution ex) where
+module Relations {ex : Execution {arch-x86}} (xex : MixedExecution ex) where
 
   open Π.Defs ex
-  open X86Execution xex
+  open MixedExecution xex
 
 
   -- | Coherence after
@@ -113,19 +100,30 @@ module Relations {ex : Execution {arch-x86}} (xex : X86Execution ex) where
   --     (with subtle changes, see those constructors)
   data Lobi (x y : Event) : Set where
     -- this was previously `xppo`
-    lob-po : ( po \₂ (⦗ EvW ⦘ ⨾ po ⨾ ⦗ EvR ⦘) ) x y → Lobi x y
+    --
+    -- Note that skips are an artifact of our proof structure, representing NOPs.
+    -- Skips are not ordered with anything.
+    lob-po : ( po-no-skip \₂ (⦗ EvW ⦘ ⨾ po ⨾ ⦗ EvR ⦘) ) x y → Lobi x y
     -- this was previously (in `implied`):
     -- ( po ⨾ ⦗ EvF ⦘ ) ∪₂ ( ⦗ EvF ⦘ ⨾ po )
     -- which was *stronger* (in isolation, at least). this current form is weaker.
     lob-f  : ( ⦗ EvW ⦘ ⨾ po ⨾ ⦗ EvF ⦘ ⨾ po ⨾ ⦗ EvR ⦘ ) x y → Lobi x y
-    -- this was previously weaker: `po ⨾ ⦗ dom rmw ⦘`. the current variant also holds
-    -- for *failed RMWs*.
-    -- (i.e., definition got weaker, axiom `ax-external` restricts more, so model got stronger)
-    lob-rₐ : ( ⦗ EvW ⦘ ⨾ po ⨾ ⦗ EvRₐ ⦘ )  x y → Lobi x y
+    -- The "official" mixed-size model states:
+    -- `⦗ EvW ⦘ ⨾ po ⨾ ⦗ EvRₐ ⦘`
+    -- while the non-mixed-size model states:
+    -- `po ⨾ ⦗ dom rmw ⦘`
+    -- The former also holds for *failed RMWs*, while the latter does not. It is thus
+    -- stronger (i.e., it applies to fewer cases), making the model weaker (i.e., more
+    -- cycles are allowed). However, this new definition is problematic, as it does not
+    -- hold in Armv8. Hence, it seems like a poor design decision. So, we stick with the
+    -- old definition.
+    --
+    -- Actually, this rule is now redundant. (See `Proof.X86toTCG.Consistent`)
+    lob-rmwˡ : ( ⦗ EvW ⦘ ⨾ po ⨾ ⦗ dom rmw ⦘ )  x y → Lobi x y
     -- this one is just framed differently from: `⦗ codom rmw ⦘ ⨾ po`, as we know that
     -- `⦗ codom rmw ⦘ ≡ EvWₐ`. (i.e., RMW can only fail their write. The RMW was successful
     --   iff the write event exists)
-    lob-wₐ : ( ⦗ EvWₐ ⦘ ⨾ po ⨾ ⦗ EvR ⦘ )  x y → Lobi x y
+    lob-rmwʳ : ( ⦗ codom rmw ⦘ ⨾ po ⨾ ⦗ EvR ⦘ )  x y → Lobi x y
 
   -- | Locally-ordered-before
   lob : Rel₀ Event
@@ -152,38 +150,3 @@ module Relations {ex : Execution {arch-x86}} (xex : X86Execution ex) where
       ax-internal   : Acyclic _≡_ ( po-loc ∪₂ Ca ∪₂ rf )
       ax-atomicity  : Empty₂ (rmw ∩₂ (fre ⨾ coe))
       ax-external   : Irreflexive _≡_ ob
-
-
-module Properties {ex : Execution {arch-x86}}
-  (xex : X86Execution ex)
-  (wf : WellFormed ex)
-  where
-  
-  open Relations xex
-  open Π.Defs ex
-  open Π.WfDefs wf
-  open X86Execution xex
-
-  si-elements : udr si ⇔₁ events
-  si-elements = ⇔: proof-⊆ proof-⊇
-    where
-    proof-⊆ : udr si ⊆₁' events
-    proof-⊆ x (opt₁ (y , si[xy])) with ⊆₂-apply si-internal si[xy]
-    ... | opt₁ po[xy] = poˡ∈ex po[xy]
-    ... | opt₂ po[yx] = poʳ∈ex po[yx]
-    ... | opf₃ (refl , x∈src) = x∈src
-    proof-⊆ y (opf₂ (x , si[xy])) with ⊆₂-apply si-internal si[xy]
-    ... | opt₁ po[xy] = poʳ∈ex po[xy]
-    ... | opt₂ po[yx] = poˡ∈ex po[yx]
-    ... | opf₃ (refl , x∈src) = x∈src
-
-    proof-⊇ : events ⊆₁' udr si
-    proof-⊇ x x∈ex =
-      let si[xx] = si-refl {with-pred x x∈ex}
-      in opt₁ (x , si[xx])
-
-  siˡ∈ex : si ˡ∈ex
-  siˡ∈ex = ⇔₁-apply-⊆₁ si-elements ∘ inj₁ ∘ (_ ,_)
-
-  siʳ∈ex : si ʳ∈ex
-  siʳ∈ex = ⇔₁-apply-⊆₁ si-elements ∘ inj₂ ∘ (_ ,_)

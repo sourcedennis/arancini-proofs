@@ -87,7 +87,7 @@ open import Arch.TCG
 
 -- ## x86 ⇒ TCG
 import MapX86toTCG             -- specification
--- import Proof.Mapping.X86toTCG  -- proof
+import Proof.Mapping.X86toTCG  -- proof
 
 -- ## TCG ⇒ Armv8 (with atomic Compare-And-Swap instruction)
 import MapTCGtoArmv8             -- specification

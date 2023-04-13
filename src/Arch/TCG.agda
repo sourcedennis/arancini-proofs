@@ -114,30 +114,13 @@ open Π.Ev arch-TCG
 EventTCG = Event -- note that this is parameterized over `arch-TCG`
 
 
-record TCGExecution (ex : Execution {arch-TCG}) : Set₁ where
-  open Execution ex
-  field
-    -- # Definitions
-    
-    si : Rel₀ Event -- ^ Same Instruction relation
+open import Arch.Mixed as Mixed using (MixedExecution)
 
 
-    -- # Wellformedness
-
-    si-internal : si ⊆₂ (po ∪₂ flip po ∪₂ ⦗ events ⦘)
-    -- basically, `si` is an equivalence relation.
-    -- note that the `filter-rel events` is crucial here. otherwise we can prove
-    -- false. pick an `x` ∉ events, construct `si x x`, construct `po x x` (with
-    -- `si-internal`), construct `x ∈ events` (with `po-elements`). tada, ⊥.
-    si-refl  : Reflexive (filter-rel events si)
-    si-trans : Transitive si
-    si-sym   : Symmetric si
-    
-module Relations {ex : Execution {arch-TCG}} (tex : TCGExecution ex) where
+module Relations {ex : Execution {arch-TCG}} (tex : MixedExecution ex) where
 
   open Π.Defs ex
-  open TCGExecution tex
-
+  open MixedExecution tex
 
   -- | Events ordered across the program order (po).
   --
@@ -168,7 +151,6 @@ module Relations {ex : Execution {arch-TCG}} (tex : TCGExecution ex) where
 
     -- other ordering operations
 
-    -- ord-rmw-dom   : ( po ⨾ ⦗ dom rmw ⦘ )   x y → Ord x y
     ord-rmw-codom : ( ⦗ codom rmw ⦘ ⨾ po ⨾ ⦗ EvRW ⦘ ) x y → Ord x y
 
     ord-w         : ( ⦗ EvRW ⦘ ⨾ po ⨾ ⦗ EvWₐ ⦘ ) x y → Ord x y
@@ -206,40 +188,16 @@ module Relations {ex : Execution {arch-TCG}} (tex : TCGExecution ex) where
 
 
 module Properties {ex : Execution {arch-TCG}}
-  (tex : TCGExecution ex)
+  (tex : MixedExecution ex)
   (wf : WellFormed ex)
   where
 
   open Relations tex
   open Π.Defs ex
   open Π.WfDefs wf
-  open TCGExecution tex
+  open MixedExecution tex
+  open Mixed.Properties tex wf
 
-
-  si-elements : udr si ⇔₁ events
-  si-elements = ⇔: proof-⊆ proof-⊇
-    where
-    proof-⊆ : udr si ⊆₁' events
-    proof-⊆ x (opt₁ (y , si[xy])) with ⊆₂-apply si-internal si[xy]
-    ... | opt₁ po[xy] = poˡ∈ex po[xy]
-    ... | opt₂ po[yx] = poʳ∈ex po[yx]
-    ... | opf₃ (_ , x∈ex) = x∈ex
-    proof-⊆ y (opf₂ (x , si[xy])) with ⊆₂-apply si-internal si[xy]
-    ... | opt₁ po[xy] = poʳ∈ex po[xy]
-    ... | opt₂ po[yx] = poˡ∈ex po[yx]
-    ... | opf₃ (refl , x∈ex) = x∈ex
-
-    proof-⊇ : events ⊆₁' udr si
-    proof-⊇ x x∈ex =
-      let si[xx] = si-refl {with-pred x x∈ex}
-      in opt₁ (x , si[xx])
-
-  siˡ∈ex : si ˡ∈ex
-  siˡ∈ex = ⇔₁-apply-⊆₁ si-elements ∘ inj₁ ∘ (_ ,_)
-  
-  siʳ∈ex : si ʳ∈ex
-  siʳ∈ex = ⇔₁-apply-⊆₁ si-elements ∘ inj₂ ∘ (_ ,_)
-  
 
   coh-irreflexive : Irreflexive _≡_ Coh
   coh-irreflexive refl (coh-po-loc (po[xx] , _)) = po-irreflexive refl po[xx]
@@ -305,15 +263,6 @@ module Properties {ex : Execution {arch-TCG}}
 
   ord-irreflexive : Irreflexive _≡_ Ord
   ord-irreflexive refl = po-irreflexive refl ∘ ord⇒po
-
-  -- ghbi-irreflexive : Irreflexive _≡_ Ghbi
-  -- ghbi-irreflexive refl (ghbi-ord ord[xx]) = ord-irreflexive refl ord[xx]
-  -- ghbi-irreflexive refl (ghbi-rfe (rfe[xy] ⨾[ _ ]⨾ si[yx])) =
-  --   proj₂ rfe[xy] (swap (⊆₂-apply si-internal si[yx]))
-  -- ghbi-irreflexive refl (ghbi-coe (coe[xy] ⨾[ _ ]⨾ si[yx])) =
-  --   proj₂ coe[xy] (swap (⊆₂-apply si-internal si[yx]))
-  -- ghbi-irreflexive refl (ghbi-fre (fre[xy] ⨾[ _ ]⨾ si[yx])) =
-  --   proj₂ fre[xy] (swap (⊆₂-apply si-internal si[yx]))
 
 
   ordˡ∈ex : Ord ˡ∈ex

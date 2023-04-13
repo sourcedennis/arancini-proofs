@@ -76,15 +76,6 @@ src-rule-rmw-codom : ∀ {a : EventTCG} {x : Location} {v : Value}
 src-rule-rmw-codom {a} a-w a∈src =
   ev[⇒] {a} a∈src , events[⇒] {a} a∈src , W₌[⇒]L a∈src a-w
 
--- private
---   r₌⇒rₜ : {x : Event LabelTCG} {loc : Location} {val : Value}
---     → TCG.EvR₌ trmw loc val x → EvRₜ trmw x
---   r₌⇒rₜ ev-r₌ = ev-r is-r refl
-
---   w₌⇒wₜ : {x : Event LabelTCG} {loc : Location} {val : Value}
---     → TCG.EvW₌ trmw loc val x → EvWₜ trmw x
---   w₌⇒wₜ ev-w₌ = ev-w is-w refl
-
 open Armv8Execution dst-a8
 
 src-rule-rmw-ok : ∀ {a b : EventTCG} {x : Location} {v₁ v₂ : Value}

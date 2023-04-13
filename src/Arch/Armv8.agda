@@ -114,6 +114,8 @@ open Π.Ev arch-Armv8
 
 EventArmv8 = Event -- note that this is parameterized over `arch-Armv8`
 
+open import Arch.Mixed as Mixed using (MixedExecution)
+
 
 private
   variable
@@ -153,31 +155,22 @@ EvFₘ = EvFₜ ∘ lab-f
 record Armv8Execution (ex : Execution {arch-Armv8}) : Set₁ where
   open Execution ex
   field
+    -- Mixed-Size extension
+    mix : MixedExecution ex
+    
     -- # Armv8-specific relations
 
     data₋ : Rel₀ Event -- called `data₋`, because `data` is a keyword
     addr  : Rel₀ Event
     ctrl  : Rel₀ Event
 
-    si : Rel₀ Event -- ^ Same Instruction relation
-
     -- rmw relation that is created by single-instruction RMWs
     amo  : Rel₀ Event
     -- rmw relation that is created by load-linked/store-conditional RMWs.
     lxsx : Rel₀ Event
-
-
+  
     -- # Armv8-specific wellformedness axioms
-
-    si-internal : si ⊆₂ (po ∪₂ flip po ∪₂ ⦗ events ⦘)
-    -- basically, `si` is an equivalence.
-    -- note that the `filter-rel events` is crucial here. otherwise we can prove
-    -- false. pick an `x` ∉ events, construct `si x x`, construct `po x x` (with
-    -- `si-internal`), construct `x ∈ events` (with `po-elements`). tada, ⊥.
-    si-refl  : Reflexive (filter-rel events si)
-    si-trans : Transitive si
-    si-sym   : Symmetric si
-
+    
     -- The `rmw` relation is obtained either by atomic read-modify-write instructions (amo)
     -- or load-linked/store-conditional instruction pairs.
     amo-lxsx-def : rmw  ⇔₂  amo ∪₂ lxsx
@@ -195,6 +188,7 @@ module Relations {ex : Execution {arch-Armv8}} (a8 : Armv8Execution ex) where
 
   open Π.Defs ex
   open Armv8Execution a8
+  open MixedExecution mix
 
 
   InterveningWrite : Rel₀ Event → Rel₀ Event
@@ -301,38 +295,3 @@ module Relations {ex : Execution {arch-Armv8}} (a8 : Armv8Execution ex) where
       ax-external  : Irreflexive _≡_ Ob -- "External Visibility"
 
   open IsArmv8Consistent
-
-
-module Properties {ex : Execution {arch-Armv8}}
-  (a8 : Armv8Execution ex)
-  (wf : WellFormed ex)
-  where
-
-  open Relations a8
-  open Π.Defs ex
-  open Π.WfDefs wf
-  open Armv8Execution a8
-
-  si-elements : udr si ⇔₁ events
-  si-elements = ⇔: proof-⊆ proof-⊇
-    where
-    proof-⊆ : udr si ⊆₁' events
-    proof-⊆ x (opt₁ (y , si[xy])) with ⊆₂-apply si-internal si[xy]
-    ... | opt₁ po[xy] = poˡ∈ex po[xy]
-    ... | opt₂ po[yx] = poʳ∈ex po[yx]
-    ... | opf₃ (refl , x∈src) = x∈src
-    proof-⊆ y (opf₂ (x , si[xy])) with ⊆₂-apply si-internal si[xy]
-    ... | opt₁ po[xy] = poʳ∈ex po[xy]
-    ... | opt₂ po[yx] = poˡ∈ex po[yx]
-    ... | opf₃ (refl , x∈src) = x∈src
-
-    proof-⊇ : events ⊆₁' udr si
-    proof-⊇ x x∈ex =
-      let si[xx] = si-refl {with-pred x x∈ex}
-      in opt₁ (x , si[xx])
-
-  siˡ∈ex : si ˡ∈ex
-  siˡ∈ex = ⇔₁-apply-⊆₁ si-elements ∘ inj₁ ∘ (_ ,_)
-
-  siʳ∈ex : si ʳ∈ex
-  siʳ∈ex = ⇔₁-apply-⊆₁ si-elements ∘ inj₂ ∘ (_ ,_)

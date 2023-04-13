@@ -15,6 +15,7 @@ open import Dodo.Binary
 -- Local imports: Architectures
 open import Arch.X86 as X86 using (EventX86; arch-x86)
 open import Arch.TCG as TCG
+open import Arch.Mixed using (MixedExecution)
 
 open import Burrow.Template.Mapping as Δ
 
@@ -29,7 +30,7 @@ open import Burrow.Template.Mapping as Δ
 -- RMOV   ↦ LD;F_LD_M
 -- WMOV   ↦ F_ST_ST;ST
 -- RMW    ↦ RMW
--- MFENCE ↦ F_SC
+-- MFENCE ↦ F_MM
 --
 -- Corresponding event mapping:
 --
@@ -37,7 +38,7 @@ open import Burrow.Template.Mapping as Δ
 -- W(x,v)              ↦ F_WW;Wᵣ(x,v)
 -- Rₗ(x,v);rmw;W(x,v') ↦ Rₗ(x,v);rmw;Wₗ(x,v')  || successful RMW
 -- Rₗ(x,v)             ↦ Rₗ(x,v)               || failed RMW
--- F                   ↦ F_SC
+-- F                   ↦ F_MM
 
 record X86⇒TCG (src : Execution {arch-x86}) (dst : Execution {arch-TCG}) : Set where
   open Δ.Defs
@@ -81,7 +82,7 @@ record X86⇒TCG (src : Execution {arch-x86}) (dst : Execution {arch-TCG}) : Set
     rule-fence : ∀ {a : EventX86}
       → EvF a
       → a ∈ events src
-      → ∃[ a' ] (a' ∈ events dst × EvFₜ TCG.SC a')
+      → ∃[ a' ] (a' ∈ events dst × EvFₜ TCG.MM a')
 
 
 private
@@ -94,23 +95,23 @@ private
 
 
 -- TCG programs mapped from x86 programs can only contain these events.
--- Rᵣ Rₗ Wᵣ Wₗ F_RM F_WW F_SC
+-- Rᵣ Rₗ Wᵣ Wₗ F_RM F_WW F_MM
 data IsTCGEventX86 : Pred₀ EventTCG where
   ev-init : IsTCGEventX86 (event-init uid loc val)
   ev-r    : IsTCGEventX86 (event-r uid tid loc val (lab-r tag))
   ev-w    : IsTCGEventX86 (event-w uid tid loc val (lab-w tag))
   ev-frm  : IsTCGEventX86 (event-f uid tid RM)
   ev-fww  : IsTCGEventX86 (event-f uid tid WW)
-  ev-fsc  : IsTCGEventX86 (event-f uid tid SC)
+  ev-fmm  : IsTCGEventX86 (event-f uid tid MM)
 
 
 -- | A proof that a TCG execution could only have been generated from a TCG program
 -- that is mapped from an X86 program.
 --
 -- This follows from mappings on the instruction-level. (Which we omit)
-record TCG-X86Restricted (ex : Execution {arch-TCG}) : Set₁ where
+record TCG-X86Restricted {ex : Execution {arch-TCG}} (tex : MixedExecution ex) : Set₁ where
   open Δ.Restrict ex
-  open TCG.Relations ex
+  open TCG.Relations tex
     
   field
     consistent : IsTCGConsistent
@@ -132,7 +133,7 @@ record TCG-X86Restricted (ex : Execution {arch-TCG}) : Set₁ where
 
 -- # Helpers
 
-module _ {ex : Execution {arch-TCG}} (ex-res : TCG-X86Restricted ex) where
+module _ {ex : Execution {arch-TCG}} {tex : MixedExecution ex} (ex-res : TCG-X86Restricted tex) where
 
   open Δ.Restrict ex
   open TCG-X86Restricted ex-res

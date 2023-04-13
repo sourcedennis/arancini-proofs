@@ -4,13 +4,15 @@
 open import Burrow.Template.Mapping as Δ
 -- Local imports
 open import Arch.TCG using (arch-TCG)
+open import Arch.Mixed using (MixedExecution)
 open import MapX86toTCG using (TCG-X86Restricted)
 
 
 module Proof.Mapping.X86toTCG.Mapping
   {dst : Execution {arch-TCG}}
+  {dst-tex : MixedExecution dst}
   (dst-wf : WellFormed dst)
-  (dst-ok : TCG-X86Restricted dst)
+  (dst-ok : TCG-X86Restricted dst-tex)
   where
 
 -- Stdlib imports
@@ -113,12 +115,12 @@ src-rule-rmw-fail {a} a-r a∈src =
   ev[⇒] {a} a∈src , events[⇒] a∈src , R₌[⇒] a∈src a-r
 
 
--- Instrs: MFENCE ↦ F_SC
--- Events: F      ↦ F_SC
+-- Instrs: MFENCE ↦ F_MM
+-- Events: F      ↦ F_MM
 src-rule-fence : ∀ {a : EventX86}
   → EvF a
   → a ∈ events src
-  → ∃[ a' ] (a' ∈ events dst × EvFₜ SC a')
+  → ∃[ a' ] (a' ∈ events dst × EvFₜ MM a')
 src-rule-fence {a} a-f a∈src =
   ev[⇒] {a} a∈src , events[⇒] a∈src , F[⇒] a∈src a-f
 

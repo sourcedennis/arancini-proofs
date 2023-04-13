@@ -47,7 +47,11 @@ open Armv8.Relations dst-a8
 open IsArmv8Consistent
 open Relation.Binary.Tri
 
-open TCG.Properties src-tex src-wf
+open import Proof.Mapping.Mixed (Armv8Execution.mix dst-a8) δ
+open import Arch.Mixed using (MixedExecution)
+-- open MixedExecution src-mex
+
+open TCG.Properties src-mex src-wf
 
 
 -- File structure
@@ -83,7 +87,7 @@ data TCGObᵢ (x y : EventTCG) : Set where
   tob-por : (⦗ EvR ⦘ ⨾ po-loc src ⨾ fre src) x y → TCGObᵢ x y
 
 TCGOb = TransClosure TCGObᵢ
-Coh⁺ = TransClosure (Coh src-tex)
+Coh⁺ = TransClosure (Coh src-mex)
 Cohₘ⁺ = TransClosure Cohₘ
 
 InternalCycle = ∃[ t ] Internal t t
@@ -137,22 +141,26 @@ _>>=_ : {A B C : Set} → A ⊎ C → ( A → B ⊎ C ) → B ⊎ C
 inj₁ x >>= f = f x
 inj₂ y >>= f = inj₂ y
 
-coh-ext : {x y : EventTCG} → Coh src-tex x y → Cohₘ x y ⊎ InternalCycle
+coh-ext : {x y : EventTCG} → Coh src-mex x y → Cohₘ x y ⊎ InternalCycle
 coh-ext (coh-po-loc pl[xy]) = inj₁ (coh-po-loc pl[xy])
 coh-ext {x} {y} (coh-rf rf[xy]) with int⊎ext src-wf x y
-... | inj₁ (inj₁ po[xy]) = inj₁ (coh-po-loc (po[xy] , ⊆₂-apply (rf-sloc src-wf) rf[xy]))
-... | inj₁ (inj₂ po[yx]) =
+... | inj₁ (opt₁ po[xy]) = inj₁ (coh-po-loc (po[xy] , ⊆₂-apply (rf-sloc src-wf) rf[xy]))
+... | inj₁ (opt₂ po[yx]) =
   inj₂ (_ , int-rw ((po[yx] , sym-same-loc (⊆₂-apply (rf-sloc src-wf) rf[xy])) ⨾[ _ ]⨾ rf[xy]))
+... | inj₁ (opf₃ x≡y) = ⊥-elim (rf-irreflexive src-wf x≡y rf[xy])
 ... | inj₂ ext-xy = inj₁ (coh-rfe (rf[xy] , ext-xy))
 coh-ext {x} {y} (coh-fr fr[xy]) with int⊎ext src-wf x y
-... | inj₁ (inj₁ po[xy]) = inj₁ (coh-po-loc (po[xy] , ⊆₂-apply (fr-sloc src-wf) fr[xy]))
-... | inj₁ (inj₂ po[yx]) =
+... | inj₁ (opt₁ po[xy]) =
+  inj₁ (coh-po-loc (po[xy] , ⊆₂-apply (fr-sloc src-wf) fr[xy]))
+... | inj₁ (opt₂ po[yx]) =
   inj₂ (_ , int-wr ((po[yx] , sym-same-loc (⊆₂-apply (fr-sloc src-wf) fr[xy])) ⨾[ _ ]⨾ fr[xy]))
+... | inj₁ (opf₃ x≡y) = ⊥-elim (fr-irreflexive src-wf x≡y fr[xy])
 ... | inj₂ ext-xy = inj₁ (coh-fre (fr[xy] , ext-xy))
 coh-ext {x} {y} (coh-co co[xy]) with int⊎ext src-wf x y
-... | inj₁ (inj₁ po[xy]) = inj₁ (coh-po-loc (po[xy] , ⊆₂-apply (co-sloc src-wf) co[xy]))
-... | inj₁ (inj₂ po[yx]) =
+... | inj₁ (opt₁ po[xy]) = inj₁ (coh-po-loc (po[xy] , ⊆₂-apply (co-sloc src-wf) co[xy]))
+... | inj₁ (opt₂ po[yx]) =
   inj₂ (_ , int-ww ((po[yx] , sym-same-loc (⊆₂-apply (co-sloc src-wf) co[xy])) ⨾[ _ ]⨾ co[xy]))
+... | inj₁ (opf₃ x≡y) = ⊥-elim (co-irreflexive src-wf x≡y co[xy])
 ... | inj₂ ext-xy = inj₁ (coh-coe (co[xy] , ext-xy))
 
 coh⁺ext : {x y : EventTCG} → Coh⁺ x y → Cohₘ⁺ x y ⊎ InternalCycle
@@ -198,9 +206,10 @@ co-ext⊎pol : {x y : Event}
 co-ext⊎pol {x} {y} co[xy] with int⊎ext src-wf x y
 ... | opt₁ (opt₁ po[xy]) =
   opt₁ (opf₂ (po[xy] , ⊆₂-apply (co-sloc src-wf) co[xy]))
-... | opt₁ (opf₂ po[yx]) =
+... | opt₁ (opt₂ po[yx]) =
   let pl[yx] = po[yx] , sym-same-loc (⊆₂-apply (co-sloc src-wf) co[xy])
   in opf₂ (_ , int-ww (pl[yx] ⨾[ _ ]⨾ co[xy]))
+... | opt₁ (opf₃ x≡y) = ⊥-elim (co-irreflexive src-wf x≡y co[xy])
 ... | opf₂ ext-xy = opt₁ (opt₁ (co[xy] , ext-xy))
 
 conv : {x y : EventTCG} → EvRW x → EvW y → Cohₘ⁺ x y → TCGOb x y ⊎ InternalCycle
@@ -281,13 +290,14 @@ coh⁺→tob coh⁺[xx] =
     cohₘ⁺[yy] ← coh⁺ext coh⁺[yy]
     map₁ (y ,_) (conv (w⇒rw y-w) y-w cohₘ⁺[yy])
 
-src-ax-coherence : Acyclic _≡_ ( Coh src-tex )
+src-ax-coherence : Acyclic _≡_ ( Coh src-mex )
 src-ax-coherence refl coh⁺[xx] with coh⁺→tob coh⁺[xx]
 ... | inj₁ (_ , ob[yy]) =
   let y∈src = ⁺-lift-predˡ tobˡ∈src ob[yy]
   in ax-external dst-consistent refl (ob[⇒] y∈src y∈src ob[yy])
   where
   open Armv8Execution dst-a8
+  open MixedExecution mix
   
   obᵢ[⇒] : Rel[⇒] TCGObᵢ Obi
   obᵢ[⇒] x∈src y∈src (tob-coe coe[xy]) =
@@ -337,7 +347,7 @@ src-ax-coherence refl coh⁺[xx] with coh⁺→tob coh⁺[xx]
         xᵗ-r = R[⇒] x∈src (rfʳ-r rf[yx])
         yᵗ-w = W[⇒] y∈src (rfˡ-w rf[yx])
         pl[xy]ᵗ = po-loc[⇒] x∈src y∈src pl[xy]
-        rfi[yx]ᵗ = rfi[⇒] y∈src x∈src (rf[yx] , inj₂ (proj₁ pl[xy]))
+        rfi[yx]ᵗ = rfi[⇒] y∈src x∈src (rf[yx] , opt₂ (proj₁ pl[xy]))
     in
     ax-internal-rw dst-consistent refl
       ((refl , xᵗ-r) ⨾[ _ ]⨾ inj₁ pl[xy]ᵗ ⨾[ _ ]⨾ (refl , yᵗ-w) ⨾[ _ ]⨾ rfi[yx]ᵗ ⨾[ _ ]⨾ (refl , xᵗ-r))
@@ -384,12 +394,12 @@ src-ax-atomicity x y (rmw[xy] , (fre[xz] ⨾[ z ]⨾ coe[zy])) =
 
 -- ## Proof
 
-src-ax-global-ord : Irreflexive _≡_ (ghb src-tex)
+src-ax-global-ord : Irreflexive _≡_ (ghb src-mex)
 src-ax-global-ord refl ghb[xx] =
   let x∈src = ⁺-lift-predˡ ghbiˡ∈ex ghb[xx]
   in ax-external dst-consistent refl (⁺[⇒]ˡ ghbiˡ∈ex ghbi[⇒]obi x∈src x∈src ghb[xx])
   where
-  ord[⇒]obi : Rel[⇒] (Ord src-tex) Obi
+  ord[⇒]obi : Rel[⇒] (Ord src-mex) Obi
   ord[⇒]obi x∈src y∈src (ord-init ((refl , x-init) ⨾[ x ]⨾ po[xy] ⨾[ _ ]⨾ (refl , _))) =
     obi-lob ([ lobi-init ((refl , Init[⇒] x∈src x-init) ⨾[ _ ]⨾ po[⇒] x∈src y∈src po[xy]) ])
   -- RR
@@ -428,11 +438,6 @@ src-ax-global-ord refl ghb[xx] =
   ord[⇒]obi x∈src y∈src (ord-mm ((refl , x-w) ⨾[ x ]⨾ po[xz] ⨾[ z ]⨾ (refl , ev-f₌) ⨾[ _ ]⨾ po[zy] ⨾[ y ]⨾ (refl , y-w))) =
     let z∈src = poʳ∈src po[xz]
     in obi-lob ([ lobi-bob (bob-f (po[⇒] x∈src z∈src po[xz] ⨾[ _ ]⨾ (refl , Fmm[⇒] z∈src ev-f₌) ⨾[ _ ]⨾ po[⇒] z∈src y∈src po[zy])) ])
-  -- ord[⇒]obi x∈src y∈src (ord-rmw-dom (po[xy] ⨾[ _ ]⨾ (refl , y∈rmwˡ@(z , rmw[yz])))) =
-  --   -- `x` orders with `z`, because `bob-rel`
-  --   {!!}
-  --   -- let z∈src = rmwˡ∈src rmw[zx]
-  --   -- in obi-lob [ lobi-bob (bob-amo ((refl , ev[⇒] z∈src , rmw[⇒]amo-al z∈src x∈src rmw[zx]) ⨾[ _ ]⨾ po[⇒] x∈src y∈src po[xy])) ]
   ord[⇒]obi x∈src y∈src (ord-rmw-codom ((refl , x∈rmwʳ@(z , rmw[zx])) ⨾[ x ]⨾ po[xy] ⨾[ _ ]⨾ (refl , _))) =
     let z∈src = rmwˡ∈src rmw[zx]
     in obi-lob [ lobi-bob (bob-amo ((refl , ev[⇒] z∈src , rmw[⇒]amo-al z∈src x∈src rmw[zx]) ⨾[ _ ]⨾ po[⇒] x∈src y∈src po[xy])) ]
@@ -441,7 +446,7 @@ src-ax-global-ord refl ghb[xx] =
   ord[⇒]obi {x} x∈src y∈src (ord-r ((refl , x-rₜ) ⨾[ _ ]⨾ po[xy] ⨾[ _ ]⨾ (refl , _))) =
     obi-lob [ lobi-bob (bob-acq ((refl , inj₁ (Rₜ[⇒]A x∈src x-rₜ)) ⨾[ _ ]⨾ po[⇒] x∈src y∈src po[xy])) ]
 
-  ghbi[⇒]obi : Rel[⇒] (Ghbi src-tex) Obi
+  ghbi[⇒]obi : Rel[⇒] (Ghbi src-mex) Obi
   ghbi[⇒]obi x∈src y∈src (ghbi-ord ord[xy]) = ord[⇒]obi x∈src y∈src ord[xy]
   ghbi[⇒]obi x∈src y∈src (ghbi-rfe (rfe[xz] ⨾[ z ]⨾ si[zy])) =
     let z∈src = rfʳ∈src (proj₁ rfe[xz])
@@ -461,7 +466,7 @@ src-ax-global-ord refl ghb[xx] =
 
 -- # Result
 
-src-consistent : IsTCGConsistent src-tex
+src-consistent : IsTCGConsistent src-mex
 src-consistent =
   record
     { ax-coherence  = src-ax-coherence

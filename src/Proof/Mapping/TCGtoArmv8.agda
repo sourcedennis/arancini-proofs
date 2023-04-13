@@ -27,6 +27,7 @@ open import MapTCGtoArmv8 using (TCG⇒Armv8) -- defines *what* we're proving
 open import Proof.Mapping.TCGtoArmv8.Execution dst-wf dst-ok as Ex -- defines δ (and ψ)
 open import Proof.Mapping.TCGtoArmv8.Consistent dst-wf dst-ok
 open import Proof.Mapping.TCGtoArmv8.Mapping dst-wf dst-ok
+open import Proof.Mapping.Mixed (Armv8Execution.mix dst-a8) δ
 open Δ.Final δ
 
 
@@ -39,7 +40,7 @@ proof-TCG⇒Armv8 :
     )
 proof-TCG⇒Armv8 =
   ( src
-  , Ex.Extra.src-tex
+  , src-mex
   , src-wf
   , src-consistent
   , mapping

@@ -220,6 +220,7 @@ module Extra where
   open import Burrow.Framework.WellFormed ψ using (rmw[⇒]; rel[$⇒]; rel[⇐])
   open RISCVExecution
   open Δ.Consistency δ using (rmwˡ-r; rmwʳ-w)
+  open import Dodo.Unary
   open import Dodo.Binary
 
 
@@ -243,7 +244,22 @@ module Extra where
   src-si-trans : Transitive src-si
   src-si-trans (x≡y@refl , x∈src) (y≡z@refl , _) = (≡-trans x≡y y≡z , x∈src)
 
-  src-tex : TCGExecution src
+  ev-rwfs : (x : EventTCG) → (EvR ∪₁ EvW ∪₁ EvF ∪₁ EvSkip) x
+  ev-rwfs (event-init _ _ _)  = opt₂ ev-init
+  ev-rwfs (event-skip _ _)    = opf₄ ev-skip
+  ev-rwfs (event-r _ _ _ _ _) = opt₁ ev-r
+  ev-rwfs (event-w _ _ _ _ _) = opt₂ ev-w
+  ev-rwfs (event-f _ _ _)     = opt₃ ev-f
+
+  src-si-dom : src-si ⊆₂ (EvR ×₂ EvR) ∪₂ (EvW ×₂ EvW) ∪₂ ⦗ events src ⦘
+  src-si-dom = ⊆: lemma
+    where
+    lemma : src-si ⊆₂' (EvR ×₂ EvR) ∪₂ (EvW ×₂ EvW) ∪₂ ⦗ events src ⦘
+    lemma x .x (refl , x∈src) = opf₃ (refl , x∈src)
+
+  open import Arch.Mixed
+
+  src-tex : MixedExecution src
   src-tex =
     record {
       si          = src-si
@@ -251,25 +267,10 @@ module Extra where
     ; si-refl     = λ {x} → src-si-refl {x}
     ; si-sym      = src-si-sym
     ; si-trans    = src-si-trans
+    ; si-dom      = src-si-dom
     }
 
 
---   Rₜ[⇒]A : Pred[⇒] (EvRₜ trmw) EvA
---   Rₜ[⇒]A x∈src = Rₐ⇒A dst-ok (events[⇒] x∈src) ∘ Rₜ[⇒] x∈src
-
---   Wₜ[⇒]L : Pred[⇒] (EvWₜ trmw) EvL
---   Wₜ[⇒]L x∈src = Wₐ⇒L dst-ok (events[⇒] x∈src) ∘ Wₜ[⇒] x∈src
-
---   rmw[⇒]amo : Rel[⇒] (rmw src) (amo dst-a8)
---   rmw[⇒]amo x∈src y∈src = rmw⇒amo dst-ok dst-wf ∘ (rmw[⇒] x∈src y∈src)
-  
---   rmw[⇒]amo-al : Rel[⇒] (rmw src) (⦗ EvA ⦘ ⨾ amo dst-a8 ⨾ ⦗ EvL ⦘)
---   rmw[⇒]amo-al x∈src y∈src rmw[xy] =
---     let dst-rmw[xy] = rmw[⇒] x∈src y∈src rmw[xy]
---         x-a = Rₐ⇒A dst-ok (events[⇒] x∈src) (rmwˡ-r dst-wf (take-dom (rmw dst) dst-rmw[xy]))
---         y-l = Wₐ⇒L dst-ok (events[⇒] y∈src) (rmwʳ-w dst-wf (take-codom (rmw dst) dst-rmw[xy]))
---     in (refl , x-a) ⨾[ _ ]⨾ rmw[⇒]amo x∈src y∈src rmw[xy] ⨾[ _ ]⨾ (refl , y-l)
-  
   R₌[$⇒] : Pred[$⇒] (EvR₌ loc val (lab-r tmov)) (EvR₌ loc val (lab-r tmov ann-none))
   R₌[$⇒] {_} {_} {event-r _ _ _ _ (lab-r .tmov ann-none)} x∈dst ev-r = ev-r
   -- impossible cases
