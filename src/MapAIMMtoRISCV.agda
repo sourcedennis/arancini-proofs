@@ -1,7 +1,7 @@
 {-# OPTIONS --safe #-}
 
 
-module MapTCGtoRISCV where
+module MapAIMMtoRISCV where
 
 -- Stdlib imports
 open import Level using (Level; _⊔_) renaming (zero to ℓzero)
@@ -18,11 +18,11 @@ open import Dodo.Unary
 open import Dodo.Binary hiding (REL)
 open import Burrow.Template.Mapping as Δ
 -- Local imports: Architectures
-open import Arch.TCG as TCG
+open import Arch.AIMM as AIMM
 open import Arch.RISCV as RISCV
 
 
--- Mapping - TCG ⇒ RISCV
+-- Mapping - AIMM ⇒ RISCV
 --
 -- Instruction mapping:
 --
@@ -58,35 +58,35 @@ open import Arch.RISCV as RISCV
 -- F_MW   ↦  F_MW
 -- F_MM   ↦  F_MM
 
-rule-ac : TCG.AccessClass → RISCV.AccessClass
+rule-ac : AIMM.AccessClass → RISCV.AccessClass
 rule-ac 𝐴R = 𝐴R
 rule-ac 𝐴W = 𝐴W
 rule-ac 𝐴M = 𝐴M
 
-rule-labf : TCG.LabF → RISCV.LabF
+rule-labf : AIMM.LabF → RISCV.LabF
 rule-labf (x 𝐹 y) = (rule-ac x) 𝐹 (rule-ac y)
 
-record TCG⇒RISCV
-    (src : Execution {arch-TCG})
+record AIMM⇒RISCV
+    (src : Execution {arch-AIMM})
     {dst : Execution {arch-RISCV}}
     (dst-rv : RISCVExecution dst) : Set where
     
   open Δ.Defs
-  open TCG.LabR
-  open TCG.LabW
+  open AIMM.LabR
+  open AIMM.LabW
   open RISCVExecution dst-rv
 
   field
     -- Instrs: LD ↦ LDR
     -- Events: Rᵣ(x,v) ↦ Rᵣ(x,v)
-    rule-ld : ∀ {a : EventTCG} {x : Location} {v : Value}
+    rule-ld : ∀ {a : EventAIMM} {x : Location} {v : Value}
       → EvR₌ x v (lab-r tmov) a
       → a ∈ events src
       → ∃[ a' ] (a' ∈ events dst × EvR₌ x v (lab-r tmov ann-none) a')
 
     -- Instrs: ST ↦ STR
     -- Events: Wᵣ(x,v) ↦ Wᵣ(x,v)
-    rule-st : ∀ {a : EventTCG} {x : Location} {v : Value}
+    rule-st : ∀ {a : EventAIMM} {x : Location} {v : Value}
       → EvW₌ x v (lab-w tmov) a
       → a ∈ events src
       → ∃[ a' ] (a' ∈ events dst × EvW₌ x v (lab-w tmov ann-none) a')
@@ -96,23 +96,23 @@ record TCG⇒RISCV
     -- Events: Rₐ;rmw;Wₐ  ↦  Rₐ;rmw;Wₐ  || successful RMW
     --         Rₐ         ↦  Rₐ         || failed RMW
 
-    rule-rmw-dom : ∀ {a : EventTCG} {x : Location} {v : Value}
+    rule-rmw-dom : ∀ {a : EventAIMM} {x : Location} {v : Value}
       → EvR₌ x v (lab-r trmw) a
       → a ∈ events src
       → ∃[ a' ] (a' ∈ events dst × EvR₌ x v (lab-r trmw ann-acqrel) a')
       
-    rule-rmw-codom : ∀ {a : EventTCG} {x : Location} {v : Value}
+    rule-rmw-codom : ∀ {a : EventAIMM} {x : Location} {v : Value}
       → EvW₌ x v (lab-w trmw) a
       → a ∈ events src
       → ∃[ a' ] (a' ∈ events dst × EvW₌ x v (lab-w trmw ann-acqrel) a')
 
-    rule-rmw-ok : ∀ {a b : EventTCG} {x : Location} {v₁ v₂ : Value}
+    rule-rmw-ok : ∀ {a b : EventAIMM} {x : Location} {v₁ v₂ : Value}
       → EvR₌ x v₁ (lab-r trmw) a
       → EvW₌ x v₂ (lab-w trmw) b
       → rmw src a b
       → ∃[ a' ] ∃[ b' ] (rmw dst a' b' × EvR₌ x v₁ (lab-r trmw ann-acqrel) a' × EvW₌ x v₂ (lab-w trmw ann-acqrel) b')
 
-    rule-rmw-fail : ∀ {a : EventTCG} {x : Location} {v : Value}
+    rule-rmw-fail : ∀ {a : EventAIMM} {x : Location} {v : Value}
       → EvR₌ x v (lab-r trmw) a
       → a ∈ events src
       → a ∉ dom (rmw src)
@@ -129,7 +129,7 @@ record TCG⇒RISCV
     -- F_MW   ↦  F_MW
     -- F_MM   ↦  F_MM
 
-    rule-f : ∀ {a : EventTCG} {f : TCG.LabF}
+    rule-f : ∀ {a : EventAIMM} {f : AIMM.LabF}
       → EvFₜ f a
       → a ∈ events src
       → ∃[ a' ] (a' ∈ events dst × EvFₜ (rule-labf f) a')
@@ -144,45 +144,45 @@ private
     val  : Value
 
 
--- RISCV programs mapped from TCG can only contain these events
-data IsRISCVEventTCG : Pred₀ EventRISCV where
-  ev-init : IsRISCVEventTCG (event-init uid loc val)
-  ev-skip : IsRISCVEventTCG (event-skip uid tid)
+-- RISCV programs mapped from AIMM can only contain these events
+data IsRISCVEventAIMM : Pred₀ EventRISCV where
+  ev-init : IsRISCVEventAIMM (event-init uid loc val)
+  ev-skip : IsRISCVEventAIMM (event-skip uid tid)
   -- read events produced from relaxed read instructions
   --   (i.e., no AMO/SC instr, no acq/rel annotations)
-  ev-rᵣ   : IsRISCVEventTCG (event-r uid tid loc val (lab-r tmov ann-none))
+  ev-rᵣ   : IsRISCVEventAIMM (event-r uid tid loc val (lab-r tmov ann-none))
   -- write events produced from relaxed write instructions
   --   (i.e., no AMO/SC instr, no acq/rel annotations)
-  ev-wᵣ   : IsRISCVEventTCG (event-w uid tid loc val (lab-w tmov ann-none))
+  ev-wᵣ   : IsRISCVEventAIMM (event-w uid tid loc val (lab-w tmov ann-none))
   -- read events produced by AMO instructions with acq/rel annotations
-  ev-rₐ   : IsRISCVEventTCG (event-r uid tid loc val (lab-r trmw ann-acqrel))
+  ev-rₐ   : IsRISCVEventAIMM (event-r uid tid loc val (lab-r trmw ann-acqrel))
   -- write events produced by AMO instructions with acq/rel annotations
-  ev-wₐ   : IsRISCVEventTCG (event-w uid tid loc val (lab-w trmw ann-acqrel))
+  ev-wₐ   : IsRISCVEventAIMM (event-w uid tid loc val (lab-w trmw ann-acqrel))
   -- basically, we can produce any memory fence. we *don't* produce TSO fences.
-  ev-f    : (x y : RISCV.AccessClass) → IsRISCVEventTCG (event-f uid tid (x 𝐹 y))
+  ev-f    : (x y : RISCV.AccessClass) → IsRISCVEventAIMM (event-f uid tid (x 𝐹 y))
 
 
-record RISCV-TCGRestricted {ex : Execution {arch-RISCV}} (rv : RISCVExecution ex) : Set₁ where
+record RISCV-AIMMRestricted {ex : Execution {arch-RISCV}} (rv : RISCVExecution ex) : Set₁ where
   open Δ.Restrict ex
   open RISCV.Relations rv
   
   field
     consistent : IsRISCVConsistent
     
-    ev-bound : events ⊆₁ IsRISCVEventTCG
+    ev-bound : events ⊆₁ IsRISCVEventAIMM
 
 
 -- # Helpers
 
-module _ {ex : Execution {arch-RISCV}} {rv : RISCVExecution ex} (ex-res : RISCV-TCGRestricted rv) where
+module _ {ex : Execution {arch-RISCV}} {rv : RISCVExecution ex} (ex-res : RISCV-AIMMRestricted rv) where
 
   open Execution ex
-  open RISCV-TCGRestricted ex-res
+  open RISCV-AIMMRestricted ex-res
 
 
   ¬ev-bound : {ev : EventRISCV}
     → ev ∈ events
-    → ¬ (IsRISCVEventTCG ev)
+    → ¬ (IsRISCVEventAIMM ev)
     → ⊥
   ¬ev-bound ev∈ex ¬is-a8 = ¬is-a8 (⊆₁-apply ev-bound ev∈ex)
 
@@ -192,14 +192,14 @@ module _ {ex : Execution {arch-RISCV}} {rv : RISCVExecution ex} (ex-res : RISCV-
     open WellFormed wf
 
 
-    po-bound : po ⊆₂ IsRISCVEventTCG ×₂ IsRISCVEventTCG
+    po-bound : po ⊆₂ IsRISCVEventAIMM ×₂ IsRISCVEventAIMM
     po-bound = ⊆₂-trans (×₂-lift-udr (⇔₁-to-⊆₁ po-elements)) (×₂-lift ev-bound ev-bound)
 
-    rf-bound : rf ⊆₂ IsRISCVEventTCG ×₂ IsRISCVEventTCG
+    rf-bound : rf ⊆₂ IsRISCVEventAIMM ×₂ IsRISCVEventAIMM
     rf-bound = ⊆₂-trans (×₂-lift-udr rf-elements) (×₂-lift ev-bound ev-bound)
 
-    co-bound : co ⊆₂ IsRISCVEventTCG ×₂ IsRISCVEventTCG
+    co-bound : co ⊆₂ IsRISCVEventAIMM ×₂ IsRISCVEventAIMM
     co-bound = ⊆₂-trans (×₂-lift-udr co-elements) (×₂-lift ev-bound ev-bound)
 
-    rmw-bound : rmw ⊆₂ IsRISCVEventTCG ×₂ IsRISCVEventTCG
+    rmw-bound : rmw ⊆₂ IsRISCVEventAIMM ×₂ IsRISCVEventAIMM
     rmw-bound = ⊆₂-trans rmw-def (⊆₂-trans imm-⊆₂ po-bound)

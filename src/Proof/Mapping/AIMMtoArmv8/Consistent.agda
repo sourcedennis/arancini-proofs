@@ -4,14 +4,14 @@
 open import Burrow.Template.Mapping as Δ
 -- Local imports
 open import Arch.Armv8 using (arch-Armv8; Armv8Execution)
-open import MapTCGtoArmv8 using (Armv8-TCGRestricted)
+open import MapAIMMtoArmv8 using (Armv8-AIMMRestricted)
 
 
-module Proof.Mapping.TCGtoArmv8.Consistent
+module Proof.Mapping.AIMMtoArmv8.Consistent
   {dst : Execution {arch-Armv8}}
   {dst-a8 : Armv8Execution dst}
   (dst-wf : WellFormed dst)
-  (dst-ok : Armv8-TCGRestricted dst-a8)
+  (dst-ok : Armv8-AIMMRestricted dst-a8)
   where
 
 -- Stdlib imports
@@ -30,19 +30,19 @@ open import Relation.Binary.Construct.Closure.Transitive using (TransClosure; [_
 open import Dodo.Unary
 open import Dodo.Binary
 -- Local imports: Architectures
-open import MapTCGtoArmv8
+open import MapAIMMtoArmv8
 open import Arch.Armv8 as Armv8
-open import Arch.TCG as TCG
+open import Arch.AIMM as AIMM
 open import Helpers
 
-open import Proof.Mapping.TCGtoArmv8.Execution dst-wf dst-ok as Ex -- defines δ
+open import Proof.Mapping.AIMMtoArmv8.Execution dst-wf dst-ok as Ex -- defines δ
 open Ex.Extra
 
 
 open Δ.Consistency δ
 
-open TCG.Relations
-open Armv8-TCGRestricted dst-ok
+open AIMM.Relations
+open Armv8-AIMMRestricted dst-ok
 open Armv8.Relations dst-a8
 open IsArmv8Consistent
 open Relation.Binary.Tri
@@ -51,7 +51,7 @@ open import Proof.Mapping.Mixed (Armv8Execution.mix dst-a8) δ
 open import Arch.Mixed using (MixedExecution)
 -- open MixedExecution src-mex
 
-open TCG.Properties src-mex src-wf
+open AIMM.Properties src-mex src-wf
 
 
 -- File structure
@@ -64,7 +64,7 @@ open TCG.Properties src-mex src-wf
 
 -- # Proof: Coherence
 
-data Internal (x y : EventTCG) : Set where
+data Internal (x y : EventAIMM) : Set where
   int-rw : ( po-loc src ⨾ rf src ) x y → Internal x y
   -- included in Obs: lws;coe
   int-ww : ( po-loc src ⨾ co src ) x y → Internal x y
@@ -72,60 +72,56 @@ data Internal (x y : EventTCG) : Set where
   int-wr : ( po-loc src ⨾ fr src ) x y → Internal x y
 
 -- like `Coh`, but `rf`, `fr`, and `co` are external
-data Cohₘ (x y : EventTCG) : Set where
+data Cohₘ (x y : EventAIMM) : Set where
   coh-po-loc : po-loc src x y → Cohₘ x y
   coh-rfe    : rfe src x y → Cohₘ x y
   coh-fre    : fre src x y → Cohₘ x y
   coh-coe    : coe src x y → Cohₘ x y
 
--- Ordered Before (immediate). A subset of Arm's Ordered-Before, defined for TCG
-data TCGObᵢ (x y : EventTCG) : Set where
-  tob-coe : coe src x y → TCGObᵢ x y
-  tob-rfe : rfe src x y → TCGObᵢ x y
-  tob-fre : fre src x y → TCGObᵢ x y
-  tob-lws : (po-loc src ⨾ ⦗ EvW ⦘) x y → TCGObᵢ x y
-  tob-por : (⦗ EvR ⦘ ⨾ po-loc src ⨾ fre src) x y → TCGObᵢ x y
+-- Ordered Before (immediate). A subset of Arm's Ordered-Before, defined for AIMM
+data AIMMObᵢ (x y : EventAIMM) : Set where
+  tob-coe : coe src x y → AIMMObᵢ x y
+  tob-rfe : rfe src x y → AIMMObᵢ x y
+  tob-fre : fre src x y → AIMMObᵢ x y
+  tob-lws : (po-loc src ⨾ ⦗ EvW ⦘) x y → AIMMObᵢ x y
+  tob-por : (⦗ EvR ⦘ ⨾ po-loc src ⨾ fre src) x y → AIMMObᵢ x y
 
-TCGOb = TransClosure TCGObᵢ
+AIMMOb = TransClosure AIMMObᵢ
 Coh⁺ = TransClosure (Coh src-mex)
 Cohₘ⁺ = TransClosure Cohₘ
 
 InternalCycle = ∃[ t ] Internal t t
-ExternalCycle = ∃[ t ] TCGOb t t
+ExternalCycle = ∃[ t ] AIMMOb t t
 
-poloc-trans : Transitive (po-loc src)
-poloc-trans {x} {y} {z} (po[xy] , xy-sloc) (po[yz] , yz-sloc) =
-  po-trans src-wf po[xy] po[yz] , trans-same-loc xy-sloc yz-sloc
-
-rfˡ-w : {x y : EventTCG} → rf src x y → EvW x
+rfˡ-w : {x y : EventAIMM} → rf src x y → EvW x
 rfˡ-w = ×₂-applyˡ (rf-w×r src-wf)
 
-rfʳ-r : {x y : EventTCG} → rf src x y → EvR y
+rfʳ-r : {x y : EventAIMM} → rf src x y → EvR y
 rfʳ-r = ×₂-applyʳ (rf-w×r src-wf)
 
-coˡ-w : {x y : EventTCG} → co src x y → EvW x
+coˡ-w : {x y : EventAIMM} → co src x y → EvW x
 coˡ-w = ×₂-applyˡ (co-w×w src-wf)
 
-frˡ-r : {x y : EventTCG} → fr src x y → EvR x
+frˡ-r : {x y : EventAIMM} → fr src x y → EvR x
 frˡ-r = ×₂-applyˡ (fr-r×w src-wf)
 
-frʳ-w : {x y : EventTCG} → fr src x y → EvW y
+frʳ-w : {x y : EventAIMM} → fr src x y → EvW y
 frʳ-w = ×₂-applyʳ (fr-r×w src-wf)
 
 -- | Rotate a coherence chain such that it starts at a W event
-coh⁺-start : {x : EventTCG} → Coh⁺ x x → ∃[ y ] EvW y × Coh⁺ y y
+coh⁺-start : {x : EventAIMM} → Coh⁺ x x → ∃[ y ] EvW y × Coh⁺ y y
 coh⁺-start [ coh[xx] ] = ⊥-elim (coh-irreflexive refl coh[xx])
 coh⁺-start {x} (coh-po-loc pl[xy] ∷ coh⁺[yx]) = step pl[xy] coh⁺[yx]
   where
   -- Keep joining `po-loc`s, until we encounter something else
-  step : {y : EventTCG} → po-loc src x y → Coh⁺ y x → ∃[ z ] EvW z × Coh⁺ z z
+  step : {y : EventAIMM} → po-loc src x y → Coh⁺ y x → ∃[ z ] EvW z × Coh⁺ z z
   step pl[xy] [ coh-po-loc pl[yx] ] =
     let po[xx] = po-trans src-wf (proj₁ pl[xy]) (proj₁ pl[yx])
     in ⊥-elim (po-irreflexive src-wf refl po[xx])
   step pl[xy] [ coh-rf rf[yx] ] = _ , rfˡ-w rf[yx] , coh-rf rf[yx] ∷ [ coh-po-loc pl[xy] ]
   step pl[xy] [ coh-fr fr[yx] ] = _ , frʳ-w fr[yx] , coh-po-loc pl[xy] ∷ [ coh-fr fr[yx] ]
   step pl[xy] [ coh-co co[yx] ] = _ , coˡ-w co[yx] , coh-co co[yx] ∷ [ coh-po-loc pl[xy] ]
-  step pl[xy] (coh-po-loc pl[yz] ∷ coh⁺[zx]) = step (poloc-trans pl[xy] pl[yz]) coh⁺[zx]
+  step pl[xy] (coh-po-loc pl[yz] ∷ coh⁺[zx]) = step (poloc-trans src-wf pl[xy] pl[yz]) coh⁺[zx]
   step pl[xy] (coh-rf rf[yz] ∷ coh⁺[zx]) =
     _ , rfˡ-w rf[yz] , coh-rf rf[yz] ∷ (coh⁺[zx] ∷ʳ coh-po-loc pl[xy])
   step pl[xy] (coh-fr fr[yz] ∷ coh⁺[zx]) =
@@ -141,7 +137,7 @@ _>>=_ : {A B C : Set} → A ⊎ C → ( A → B ⊎ C ) → B ⊎ C
 inj₁ x >>= f = f x
 inj₂ y >>= f = inj₂ y
 
-coh-ext : {x y : EventTCG} → Coh src-mex x y → Cohₘ x y ⊎ InternalCycle
+coh-ext : {x y : EventAIMM} → Coh src-mex x y → Cohₘ x y ⊎ InternalCycle
 coh-ext (coh-po-loc pl[xy]) = inj₁ (coh-po-loc pl[xy])
 coh-ext {x} {y} (coh-rf rf[xy]) with int⊎ext src-wf x y
 ... | inj₁ (opt₁ po[xy]) = inj₁ (coh-po-loc (po[xy] , ⊆₂-apply (rf-sloc src-wf) rf[xy]))
@@ -163,7 +159,7 @@ coh-ext {x} {y} (coh-co co[xy]) with int⊎ext src-wf x y
 ... | inj₁ (opf₃ x≡y) = ⊥-elim (co-irreflexive src-wf x≡y co[xy])
 ... | inj₂ ext-xy = inj₁ (coh-coe (co[xy] , ext-xy))
 
-coh⁺ext : {x y : EventTCG} → Coh⁺ x y → Cohₘ⁺ x y ⊎ InternalCycle
+coh⁺ext : {x y : EventAIMM} → Coh⁺ x y → Cohₘ⁺ x y ⊎ InternalCycle
 coh⁺ext [ coh[xy] ] = map₁ [_] (coh-ext coh[xy])
 coh⁺ext ( coh[xz] ∷ coh⁺[zy] ) =
   do
@@ -173,7 +169,7 @@ coh⁺ext ( coh[xz] ∷ coh⁺[zy] ) =
 
 -- |
 -- This does not *generally* produce `coe`. As init events are not external
-chain-pol-fre : {x y z : EventTCG}
+chain-pol-fre : {x y z : EventAIMM}
   → EvW x → po-loc src x y → fre src y z → co src x z ⊎ InternalCycle
 chain-pol-fre {x} x-w pl[xy] fre[yz]@(rf⁻¹[yv] ⨾[ v ]⨾ co[vz] , ¬po[yz]) =
   let v-w = coˡ-w co[vz]
@@ -212,16 +208,16 @@ co-ext⊎pol {x} {y} co[xy] with int⊎ext src-wf x y
 ... | opt₁ (opf₃ x≡y) = ⊥-elim (co-irreflexive src-wf x≡y co[xy])
 ... | opf₂ ext-xy = opt₁ (opt₁ (co[xy] , ext-xy))
 
-conv : {x y : EventTCG} → EvRW x → EvW y → Cohₘ⁺ x y → TCGOb x y ⊎ InternalCycle
+conv : {x y : EventAIMM} → EvRW x → EvW y → Cohₘ⁺ x y → AIMMOb x y ⊎ InternalCycle
 conv x-rw y-w [ coh-po-loc pl[xy] ] = inj₁ [ tob-lws (pl[xy] ⨾[ _ ]⨾ (refl , y-w)) ]
 conv x-rw y-w [ coh-rfe rfe[xy] ] = inj₁ [ tob-rfe rfe[xy] ]
 conv x-rw y-w [ coh-fre fre[xy] ] = inj₁ [ tob-fre fre[xy] ]
 conv x-rw y-w [ coh-coe coe[xy] ] = inj₁ [ tob-coe coe[xy] ]
 conv x-rw y-w (coh-po-loc pl[xz] ∷ coh⁺[zy]) = conv-pl x-rw y-w pl[xz] coh⁺[zy]
   where
-  conv-pl : {x y z : EventTCG} → EvRW x → EvW z → po-loc src x y → Cohₘ⁺ y z → TCGOb x z ⊎ InternalCycle
+  conv-pl : {x y z : EventAIMM} → EvRW x → EvW z → po-loc src x y → Cohₘ⁺ y z → AIMMOb x z ⊎ InternalCycle
   conv-pl x-rw z-w pl[xy] [ coh-po-loc pl[yz] ] =
-    opt₁ [ tob-lws (poloc-trans pl[xy] pl[yz] ⨾[ _ ]⨾ (refl , z-w)) ]
+    opt₁ [ tob-lws (poloc-trans src-wf pl[xy] pl[yz] ⨾[ _ ]⨾ (refl , z-w)) ]
   conv-pl x-rw z-w pl[xy] [ coh-rfe rfe[yz] ] = ⊥-elim (disjoint-r/w _ (rfʳ-r (proj₁ rfe[yz]) , z-w))
   conv-pl x-rw z-w pl[xy] [ coh-fre fre[yz] ] with rw/rw x-rw
   ... | inj₁ x-r = inj₁ [ tob-por ((refl , x-r) ⨾[ _ ]⨾ pl[xy] ⨾[ _ ]⨾ fre[yz]) ]
@@ -237,7 +233,7 @@ conv x-rw y-w (coh-po-loc pl[xz] ∷ coh⁺[zy]) = conv-pl x-rw y-w pl[xz] coh�
     let y-w = coˡ-w (proj₁ coe[yz])
     in opt₁ (tob-lws (pl[xy] ⨾[ _ ]⨾ (refl , y-w)) ∷ [ tob-coe coe[yz] ])
   conv-pl x-rw z-w pl[xy] (coh-po-loc pl[yv] ∷ coh⁺[vz]) =
-    conv-pl x-rw z-w (poloc-trans pl[xy] pl[yv]) coh⁺[vz]
+    conv-pl x-rw z-w (poloc-trans src-wf pl[xy] pl[yv]) coh⁺[vz]
   conv-pl {x} {y} {z} x-rw z-w pl[xy] (coh-rfe rfe[yv] ∷ coh⁺[vz]) =
     let y-w = ×₂-applyˡ (rf-w×r src-wf) (proj₁ rfe[yv])
         v-rw = r⇒rw (×₂-applyʳ (rf-w×r src-wf) (proj₁ rfe[yv]))
@@ -283,7 +279,7 @@ conv x-rw y-w (coh-coe coe[xz] ∷ coh⁺[zy]) =
   let z-rw = w⇒rw (×₂-applyʳ (co-w×w src-wf) (proj₁ coe[xz]))
   in map₁ (tob-coe coe[xz] ∷_) (conv z-rw y-w coh⁺[zy])
 
-coh⁺→tob : {x : EventTCG} → Coh⁺ x x → ExternalCycle ⊎ InternalCycle
+coh⁺→tob : {x : EventAIMM} → Coh⁺ x x → ExternalCycle ⊎ InternalCycle
 coh⁺→tob coh⁺[xx] =
   do
     let (y , y-w , coh⁺[yy]) = coh⁺-start coh⁺[xx]
@@ -299,7 +295,7 @@ src-ax-coherence refl coh⁺[xx] with coh⁺→tob coh⁺[xx]
   open Armv8Execution dst-a8
   open MixedExecution mix
   
-  obᵢ[⇒] : Rel[⇒] TCGObᵢ Obi
+  obᵢ[⇒] : Rel[⇒] AIMMObᵢ Obi
   obᵢ[⇒] x∈src y∈src (tob-coe coe[xy]) =
     let (co[xy]ᵗ , xy-ext) = coe[⇒] x∈src y∈src coe[xy]
         y∈dst = coʳ∈ex dst-wf co[xy]ᵗ
@@ -329,18 +325,18 @@ src-ax-coherence refl coh⁺[xx] with coh⁺→tob coh⁺[xx]
         si[yy] = si-refl {with-pred _ y∈dst}
     in obi-fre ((refl , xᵗ-r) ⨾[ _ ]⨾ pl[xz]ᵗ ⨾[ _ ]⨾ fre[zy]ᵗ ⨾[ _ ]⨾ si[yy])
 
-  tobˡ∈src : {x y : EventTCG} → TCGObᵢ x y → x ∈ events src
+  tobˡ∈src : {x y : EventAIMM} → AIMMObᵢ x y → x ∈ events src
   tobˡ∈src (tob-coe coe[xy]) = coˡ∈src (proj₁ coe[xy])
   tobˡ∈src (tob-rfe rfe[xy]) = rfˡ∈src (proj₁ rfe[xy])
   tobˡ∈src (tob-fre fre[xy]) = frˡ∈src (proj₁ fre[xy])
   tobˡ∈src (tob-lws (pl[xy] ⨾[ _ ]⨾ (refl , _))) = poˡ∈src (proj₁ pl[xy])
   tobˡ∈src (tob-por ((refl , _) ⨾[ _ ]⨾ pl[xz] ⨾[ _ ]⨾ fre[zy])) = poˡ∈src (proj₁ pl[xz])
 
-  ob[⇒] : Rel[⇒] TCGOb Ob
+  ob[⇒] : Rel[⇒] AIMMOb Ob
   ob[⇒] = ⁺[⇒]ˡ tobˡ∈src obᵢ[⇒]
 ... | inj₂ (_ , internal[yy]) = internal-⊥ internal[yy]
   where
-  internal-⊥ : {x : EventTCG} → Internal x x → ⊥
+  internal-⊥ : {x : EventAIMM} → Internal x x → ⊥
   internal-⊥ {x} (int-rw (pl[xy] ⨾[ y ]⨾ rf[yx])) =
     let x∈src = poˡ∈src (proj₁ pl[xy])
         y∈src = rfˡ∈src rf[yx]
@@ -466,7 +462,7 @@ src-ax-global-ord refl ghb[xx] =
 
 -- # Result
 
-src-consistent : IsTCGConsistent src-mex
+src-consistent : IsAIMMConsistent src-mex
 src-consistent =
   record
     { ax-coherence  = src-ax-coherence

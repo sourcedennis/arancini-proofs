@@ -3,16 +3,16 @@
 -- External library imports
 open import Burrow.Template.Mapping as Δ
 -- Local imports
-open import Arch.TCG using (arch-TCG)
+open import Arch.AIMM using (arch-AIMM)
 open import Arch.Mixed using (MixedExecution)
-open import MapX86toTCG using (TCG-X86Restricted)
+open import MapX86toAIMM using (AIMM-X86Restricted)
 
 
-module Proof.Mapping.X86toTCG.Consistent
-  {dst : Execution {arch-TCG}}
+module Proof.Mapping.X86toAIMM.Consistent
+  {dst : Execution {arch-AIMM}}
   {dst-tex : MixedExecution dst}
   (dst-wf : WellFormed dst)
-  (dst-ok : TCG-X86Restricted dst-tex)
+  (dst-ok : AIMM-X86Restricted dst-tex)
   where
 
 -- Stdlib imports
@@ -29,11 +29,11 @@ open import Relation.Binary.Construct.Closure.Transitive using (TransClosure; _+
 open import Dodo.Unary
 open import Dodo.Binary
 -- Local imports: Architectures
-open import Arch.TCG as TCG
+open import Arch.AIMM as AIMM
 open import Arch.X86 as X86
 open import Helpers
 
-open import Proof.Mapping.X86toTCG.Execution dst-wf dst-ok as Ex -- defines δ
+open import Proof.Mapping.X86toAIMM.Execution dst-wf dst-ok as Ex -- defines δ
 open import Proof.Mapping.Mixed dst-tex δ
 open import Arch.Mixed as Mixed
 open Mixed.Derived src-mex
@@ -44,9 +44,9 @@ open Ex.Extra
 open Δ.Consistency δ
 
 open X86.Relations
-open TCG-X86Restricted dst-ok
-open TCG.Relations
-open IsTCGConsistent
+open AIMM-X86Restricted dst-ok
+open AIMM.Relations
+open IsAIMMConsistent
 
 
 
@@ -105,7 +105,7 @@ src-ax-atomicity x y (rmw[xy] , (fre[xz] ⨾[ z ]⨾ coe[zy])) =
 -- This is the most annoying case, for two main reasons:
 --
 -- * The x86 model contains a redundant case: `lob-rmwˡ`. Here, we demonstrate it
---   is redundant, before mapping to TCG. To do so, we divert chains from `dom rmw`
+--   is redundant, before mapping to AIMM. To do so, we divert chains from `dom rmw`
 --   to the corresponding `codom rmw`. (In particular, see `rmwˡ-detour` below)
 --
 -- * The x86 model has an alternative formulation of xppo (x86 preserved program
@@ -130,7 +130,7 @@ src-ax-atomicity x y (rmw[xy] , (fre[xz] ⨾[ z ]⨾ coe[zy])) =
 -- * Map to our representation without `rmwˡ` and cleaner xppo (without fences).
 --   (See `Obaᵢ` and `obm⇒oba`)
 --
--- * Map to a corresponding `ghb` chain in TCG. As that `ghb` chain is impossible,
+-- * Map to a corresponding `ghb` chain in AIMM. As that `ghb` chain is impossible,
 --   so is our initial `ob` chain in X86.
 
 
@@ -521,7 +521,7 @@ src-ax-external refl ob[xx] =
       -- Remove the (redundant) `lob-rmwˡ` case.
       -- and clean up the annoying xppo representation (which also includes fences)
       oba[yy] = obm⇒oba y-w obm[yy]
-      -- Map it to a TCG cycle
+      -- Map it to a AIMM cycle
       y∈src = ⁺-lift-predˡ obaᵢˡ∈src oba[yy]
       ghb[yy]ᵗ = oba[⇒]ghb y∈src y∈src oba[yy]
   in ax-global-ord dst-consistent refl ghb[yy]ᵗ

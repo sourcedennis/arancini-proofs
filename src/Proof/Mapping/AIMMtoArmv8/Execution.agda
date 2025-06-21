@@ -4,14 +4,14 @@
 open import Burrow.Template.Mapping as Δ
 -- Local imports
 open import Arch.Armv8 using (arch-Armv8; Armv8Execution)
-open import MapTCGtoArmv8 using (Armv8-TCGRestricted)
+open import MapAIMMtoArmv8 using (Armv8-AIMMRestricted)
 
 
-module Proof.Mapping.TCGtoArmv8.Execution
+module Proof.Mapping.AIMMtoArmv8.Execution
   {dst : Execution {arch-Armv8}}
   {dst-a8 : Armv8Execution dst}
   (dst-wf : WellFormed dst)
-  (dst-ok : Armv8-TCGRestricted dst-a8)
+  (dst-ok : Armv8-AIMMRestricted dst-a8)
   where
 
 -- Stdlib imports
@@ -30,16 +30,16 @@ open import Dodo.Unary
 open import Dodo.Binary hiding (REL)
 -- Local imports
 open import Helpers
-open import MapTCGtoArmv8
+open import MapAIMMtoArmv8
 open import Arch.Armv8 as Armv8
-open import Arch.TCG as TCG
+open import Arch.AIMM as AIMM
 
 open Δ.Defs
 
 
-dst-consistent = Armv8-TCGRestricted.consistent dst-ok
+dst-consistent = Armv8-AIMMRestricted.consistent dst-ok
 
-open Armv8-TCGRestricted dst-ok
+open Armv8-AIMMRestricted dst-ok
 
 
 -- # Backward Mapping of Relations
@@ -65,14 +65,14 @@ open Armv8-TCGRestricted dst-ok
 -- F_MM       ↦  F_FULL
 
 
-ev[⇐] : {x : EventArmv8} → (x∈dst : x ∈ events dst) → EventTCG
+ev[⇐] : {x : EventArmv8} → (x∈dst : x ∈ events dst) → EventAIMM
 ev[⇐] {event-init uid loc val} x∈dst = event-init uid loc val
 ev[⇐] {event-skip uid tid}     x∈dst = event-skip uid tid
 ev[⇐] {event-r uid tid loc val lab} x∈dst = event-r uid tid loc val (lab[⇐] lab)
   where
   -- only `lab-r tmov` and `lab-a trmw` are possible.
   -- we map all, because it makes the proofs easier. (and prove their absence elsewhere)
-  lab[⇐] : Armv8.LabR → TCG.LabR
+  lab[⇐] : Armv8.LabR → AIMM.LabR
   lab[⇐] (lab-r tag) = lab-r tag
   lab[⇐] (lab-a tag) = lab-r tag
   lab[⇐] lab-q       = lab-r tmov
@@ -80,12 +80,12 @@ ev[⇐] {event-w uid tid loc val lab} x∈dst =
   event-w uid tid loc val (lab[⇐] lab)
   where
   -- only `lab-w tmov` and `lab-l trmw` are possible
-  lab[⇐] : Armv8.LabW → TCG.LabW
+  lab[⇐] : Armv8.LabW → AIMM.LabW
   lab[⇐] (lab-w tag) = lab-w tag
   lab[⇐] (lab-l tag) = lab-w tag
 ev[⇐] x@{event-f uid tid lab} x∈dst = event-f uid tid (lab[⇐] lab refl)
   where
-  lab[⇐] : (l : Armv8.LabF) → l ≡ lab → TCG.LabF
+  lab[⇐] : (l : Armv8.LabF) → l ≡ lab → AIMM.LabF
   lab[⇐] (lab-f F-full) refl with ⇔₁-apply-⊆₁ org-f-def (x∈dst , ev-f)
   ... | (opt₁ _) = WR
   ... | (opt₂ _) = WM
@@ -390,13 +390,13 @@ module Extra where
   Fmm[⇒] = [$⇒]→₁[⇒] Fmm[$⇒]
 
 
-  F[⇒]ld : {m : TCG.LabF} → m ∈ₗ (RR ∷ RW ∷ RM ∷ [])
+  F[⇒]ld : {m : AIMM.LabF} → m ∈ₗ (RR ∷ RW ∷ RM ∷ [])
     → Pred[⇒] (EvFₜ m) (EvFₘ F-ld)
   F[⇒]ld (here refl)                 = Frr[⇒]
   F[⇒]ld (there (here refl))         = Frw[⇒]
   F[⇒]ld (there (there (here refl))) = Frm[⇒]
   
-  F[⇒]ff : {m : TCG.LabF} → m ∈ₗ (WR ∷ WM ∷ MR ∷ MW ∷ MM ∷ [])
+  F[⇒]ff : {m : AIMM.LabF} → m ∈ₗ (WR ∷ WM ∷ MR ∷ MW ∷ MM ∷ [])
     → Pred[⇒] (EvFₜ m) (EvFₘ F-full)
   F[⇒]ff (here refl)                                         = Fwr[⇒]
   F[⇒]ff (there (here refl))                                 = Fwm[⇒]

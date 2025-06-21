@@ -3,16 +3,16 @@
 -- External library imports
 open import Burrow.Template.Mapping as Δ
 -- Local imports
-open import Arch.TCG using (arch-TCG)
+open import Arch.AIMM using (arch-AIMM)
 open import Arch.Mixed using (MixedExecution)
-open import MapX86toTCG using (TCG-X86Restricted)
+open import MapX86toAIMM using (AIMM-X86Restricted)
 
 
-module Proof.Mapping.X86toTCG.Mapping
-  {dst : Execution {arch-TCG}}
+module Proof.Mapping.X86toAIMM.Mapping
+  {dst : Execution {arch-AIMM}}
   {dst-tex : MixedExecution dst}
   (dst-wf : WellFormed dst)
-  (dst-ok : TCG-X86Restricted dst-tex)
+  (dst-ok : AIMM-X86Restricted dst-tex)
   where
 
 -- Stdlib imports
@@ -25,17 +25,17 @@ open import Dodo.Binary
 -- Local imports
 open import Helpers
 open import Arch.X86 as X86
-open import Arch.TCG
+open import Arch.AIMM
 
 
-open import MapX86toTCG -- defines the stuff we're proving
+open import MapX86toAIMM -- defines the stuff we're proving
 
-open import Proof.Mapping.X86toTCG.Execution dst-wf dst-ok as Ex -- defines δ
+open import Proof.Mapping.X86toAIMM.Execution dst-wf dst-ok as Ex -- defines δ
 open Ex.Extra
 
 open Δ.Consistency δ
 
-open TCG-X86Restricted
+open AIMM-X86Restricted
 
 
 private
@@ -125,7 +125,7 @@ src-rule-fence {a} a-f a∈src =
   ev[⇒] {a} a∈src , events[⇒] a∈src , F[⇒] a∈src a-f
 
 
-mapping : X86⇒TCG src dst
+mapping : X86⇒AIMM src dst
 mapping =
   record
     { rule-rmov     = src-rule-rmov

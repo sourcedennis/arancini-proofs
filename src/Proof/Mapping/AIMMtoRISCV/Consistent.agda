@@ -4,14 +4,14 @@
 open import Burrow.Template.Mapping as Δ
 -- Local imports
 open import Arch.RISCV using (arch-RISCV; RISCVExecution)
-open import MapTCGtoRISCV using (RISCV-TCGRestricted)
+open import MapAIMMtoRISCV using (RISCV-AIMMRestricted)
 
 
-module Proof.Mapping.TCGtoRISCV.Consistent
+module Proof.Mapping.AIMMtoRISCV.Consistent
   {dst : Execution {arch-RISCV}}
   {dst-rv : RISCVExecution dst}
   (dst-wf : WellFormed dst)
-  (dst-ok : RISCV-TCGRestricted dst-rv)
+  (dst-ok : RISCV-AIMMRestricted dst-rv)
   where
 
 -- Stdlib imports
@@ -30,22 +30,22 @@ open import Relation.Binary.Construct.Closure.Transitive using (TransClosure; [_
 open import Dodo.Unary
 open import Dodo.Binary
 -- Local imports: Architectures
-open import MapTCGtoRISCV
+open import MapAIMMtoRISCV
 open import Arch.RISCV as RISCV
-open import Arch.TCG as TCG
+open import Arch.AIMM as AIMM
 open import Helpers
 
-open import Proof.Mapping.TCGtoRISCV.Execution dst-wf dst-ok as Ex -- defines δ
+open import Proof.Mapping.AIMMtoRISCV.Execution dst-wf dst-ok as Ex -- defines δ
 open Ex.Extra
 
 open Δ.Consistency δ
 
-open TCG.Relations
-open TCG.Properties
+open AIMM.Relations
+open AIMM.Properties
 
 open RISCV.Relations dst-rv
 
-dst-consistent = RISCV-TCGRestricted.consistent dst-ok
+dst-consistent = RISCV-AIMMRestricted.consistent dst-ok
 
 open IsRISCVConsistent dst-consistent
 
@@ -205,7 +205,7 @@ src-ax-global-ord refl ghb[xx] =
 
 -- # Result
 
-src-consistent : IsTCGConsistent src-tex
+src-consistent : IsAIMMConsistent src-tex
 src-consistent =
   record
     { ax-coherence  = src-ax-coherence

@@ -1,7 +1,7 @@
 {-# OPTIONS --safe #-}
 
 
-module Arch.TCG where
+module Arch.AIMM where
 
 -- Stdlib imports
 import Relation.Binary.PropositionalEquality as Eq
@@ -83,8 +83,8 @@ lab-f-dec≡ (l₁ 𝐹 r₁) (l₂ 𝐹 r₂) =
     (λ{refl → refl}) (λ{refl → refl})
     (access-class-dec≡ l₁ l₂) (access-class-dec≡ r₁ r₂)
 
-arch-TCG : Arch
-arch-TCG =
+arch-AIMM : Arch
+arch-AIMM =
   record
     { LabR       = LabR
     ; LabW       = LabW
@@ -109,15 +109,15 @@ pattern MM = 𝐴M 𝐹 𝐴M
 pattern M? = 𝐴M 𝐹 _
 
 
-open Π.Ev arch-TCG
+open Π.Ev arch-AIMM
 
-EventTCG = Event -- note that this is parameterized over `arch-TCG`
+EventAIMM = Event -- note that this is parameterized over `arch-TCG`
 
 
 open import Arch.Mixed as Mixed using (MixedExecution)
 
 
-module Relations {ex : Execution {arch-TCG}} (tex : MixedExecution ex) where
+module Relations {ex : Execution {arch-AIMM}} (tex : MixedExecution ex) where
 
   open Π.Defs ex
   open MixedExecution tex
@@ -178,16 +178,16 @@ module Relations {ex : Execution {arch-TCG}} (tex : MixedExecution ex) where
   ghb = TransClosure Ghbi
 
 
-  record IsTCGConsistent : Set where
+  record IsAIMMConsistent : Set where
     field
-      -- # TCG-specific consistency constraints
+      -- # AIMM-specific consistency constraints
 
       ax-coherence  : Acyclic _≡_ Coh
       ax-atomicity  : Empty₂ (rmw ∩₂ (fre ⨾ coe))
       ax-global-ord : Irreflexive _≡_ ghb
 
 
-module Properties {ex : Execution {arch-TCG}}
+module Properties {ex : Execution {arch-AIMM}}
   (tex : MixedExecution ex)
   (wf : WellFormed ex)
   where

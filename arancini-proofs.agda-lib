@@ -2,6 +2,6 @@ name: arancini-proofs
 include:
   src
 depend:
-  standard-library-1.7.1
+  standard-library-1.7.3
   dodo
   burrow

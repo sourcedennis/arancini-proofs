@@ -1,6 +1,6 @@
 {-# OPTIONS --safe #-}
 
-module MapX86toTCG where
+module MapX86toAIMM where
 
 -- Stdlib imports
 open import Level using (Level; _⊔_) renaming (zero to ℓzero)
@@ -14,7 +14,7 @@ open import Dodo.Unary
 open import Dodo.Binary
 -- Local imports: Architectures
 open import Arch.X86 as X86 using (EventX86; arch-x86)
-open import Arch.TCG as TCG
+open import Arch.AIMM as AIMM
 open import Arch.Mixed using (MixedExecution)
 
 open import Burrow.Template.Mapping as Δ
@@ -22,7 +22,7 @@ open import Burrow.Template.Mapping as Δ
 
 -- # Definitions
 
--- Mapping - X86 ⇒ TCG
+-- Mapping - X86 ⇒ AIMM
 --
 --
 -- Instruction mapping:
@@ -40,7 +40,7 @@ open import Burrow.Template.Mapping as Δ
 -- Rₗ(x,v)             ↦ Rₗ(x,v)               || failed RMW
 -- F                   ↦ F_MM
 
-record X86⇒TCG (src : Execution {arch-x86}) (dst : Execution {arch-TCG}) : Set where
+record X86⇒AIMM (src : Execution {arch-x86}) (dst : Execution {arch-AIMM}) : Set where
   open Δ.Defs
   open X86.LabR
   open X86.LabW
@@ -82,7 +82,7 @@ record X86⇒TCG (src : Execution {arch-x86}) (dst : Execution {arch-TCG}) : Set
     rule-fence : ∀ {a : EventX86}
       → EvF a
       → a ∈ events src
-      → ∃[ a' ] (a' ∈ events dst × EvFₜ TCG.MM a')
+      → ∃[ a' ] (a' ∈ events dst × EvFₜ AIMM.MM a')
 
 
 private
@@ -94,55 +94,55 @@ private
     tag : Tag
 
 
--- TCG programs mapped from x86 programs can only contain these events.
+-- AIMM programs mapped from x86 programs can only contain these events.
 -- Rᵣ Rₗ Wᵣ Wₗ F_RM F_WW F_MM
-data IsTCGEventX86 : Pred₀ EventTCG where
-  ev-init : IsTCGEventX86 (event-init uid loc val)
-  ev-r    : IsTCGEventX86 (event-r uid tid loc val (lab-r tag))
-  ev-w    : IsTCGEventX86 (event-w uid tid loc val (lab-w tag))
-  ev-frm  : IsTCGEventX86 (event-f uid tid RM)
-  ev-fww  : IsTCGEventX86 (event-f uid tid WW)
-  ev-fmm  : IsTCGEventX86 (event-f uid tid MM)
+data IsAIMMEventX86 : Pred₀ EventAIMM where
+  ev-init : IsAIMMEventX86 (event-init uid loc val)
+  ev-r    : IsAIMMEventX86 (event-r uid tid loc val (lab-r tag))
+  ev-w    : IsAIMMEventX86 (event-w uid tid loc val (lab-w tag))
+  ev-frm  : IsAIMMEventX86 (event-f uid tid RM)
+  ev-fww  : IsAIMMEventX86 (event-f uid tid WW)
+  ev-fmm  : IsAIMMEventX86 (event-f uid tid MM)
 
 
--- | A proof that a TCG execution could only have been generated from a TCG program
+-- | A proof that a AIMM execution could only have been generated from a AIMM program
 -- that is mapped from an X86 program.
 --
 -- This follows from mappings on the instruction-level. (Which we omit)
-record TCG-X86Restricted {ex : Execution {arch-TCG}} (tex : MixedExecution ex) : Set₁ where
+record AIMM-X86Restricted {ex : Execution {arch-AIMM}} (tex : MixedExecution ex) : Set₁ where
   open Δ.Restrict ex
-  open TCG.Relations tex
+  open AIMM.Relations tex
     
   field
-    consistent : IsTCGConsistent
+    consistent : IsAIMMConsistent
     
-    ev-bound : events ⊆₁ IsTCGEventX86
+    ev-bound : events ⊆₁ IsAIMMEventX86
     
     -- Read events that are generated from the LD instruction are /always/ followed by a F_RM fence.
     -- By the rule: Rᵣ(x,v) ↦ Rᵣ(x,v);F_RM
     -- There is no other way of obtaining a Rᵣ event.
-    r-f-po₁ : ∀ {a : EventTCG} → a ∈ events → EvRₜ tmov a → ∃[ b ] (po-imm a b × EvFₜ RM b)
-    r-f-po₂ : ∀ {b : EventTCG} → b ∈ events → EvFₜ RM b → ∃[ a ] (po-imm a b × EvRₜ tmov a)
+    r-f-po₁ : ∀ {a : EventAIMM} → a ∈ events → EvRₜ tmov a → ∃[ b ] (po-imm a b × EvFₜ RM b)
+    r-f-po₂ : ∀ {b : EventAIMM} → b ∈ events → EvFₜ RM b → ∃[ a ] (po-imm a b × EvRₜ tmov a)
 
     -- Rule: W(x,v) ↦ F_WW;W(x,v)
     -- Every non-rmw write (ST) is preceded by a F_WW event
-    f-w-po₁ : ∀ {a b : EventTCG} → b ∈ events → EvWₜ tmov b → ∃[ a ] (po-imm a b × EvFₜ WW a)
+    f-w-po₁ : ∀ {a b : EventAIMM} → b ∈ events → EvWₜ tmov b → ∃[ a ] (po-imm a b × EvFₜ WW a)
     -- Every F_WW event is followed by a W event
-    f-w-po₂ : ∀ {a b : EventTCG} → a ∈ events → EvFₜ WW a → ∃[ b ] (po-imm a b × EvWₜ tmov b)
+    f-w-po₂ : ∀ {a b : EventAIMM} → a ∈ events → EvFₜ WW a → ∃[ b ] (po-imm a b × EvWₜ tmov b)
 
 
 -- # Helpers
 
-module _ {ex : Execution {arch-TCG}} {tex : MixedExecution ex} (ex-res : TCG-X86Restricted tex) where
+module _ {ex : Execution {arch-AIMM}} {tex : MixedExecution ex} (ex-res : AIMM-X86Restricted tex) where
 
   open Δ.Restrict ex
-  open TCG-X86Restricted ex-res
+  open AIMM-X86Restricted ex-res
 
 
   ¬ev-bound :
-      {ev : EventTCG}
+      {ev : EventAIMM}
     → ev ∈ events
-    → ¬ (IsTCGEventX86 ev)
+    → ¬ (IsAIMMEventX86 ev)
     → ⊥
   ¬ev-bound ev∈ex ¬is-a8 = ¬is-a8 (⊆₁-apply ev-bound ev∈ex)
 
@@ -152,16 +152,16 @@ module _ {ex : Execution {arch-TCG}} {tex : MixedExecution ex} (ex-res : TCG-X86
     open WellFormed wf
 
 
-    po-bound : po ⊆₂ IsTCGEventX86 ×₂ IsTCGEventX86
+    po-bound : po ⊆₂ IsAIMMEventX86 ×₂ IsAIMMEventX86
     po-bound =
       ⊆₂-trans (×₂-lift-udr (⇔₁-to-⊆₁ po-elements)) (×₂-lift ev-bound ev-bound)
 
-    rf-bound : rf ⊆₂ IsTCGEventX86 ×₂ IsTCGEventX86
+    rf-bound : rf ⊆₂ IsAIMMEventX86 ×₂ IsAIMMEventX86
     rf-bound =
       ⊆₂-trans (×₂-lift-udr rf-elements) (×₂-lift ev-bound ev-bound)
 
-    co-bound : co ⊆₂ IsTCGEventX86 ×₂ IsTCGEventX86
+    co-bound : co ⊆₂ IsAIMMEventX86 ×₂ IsAIMMEventX86
     co-bound = ⊆₂-trans (×₂-lift-udr co-elements) (×₂-lift ev-bound ev-bound)
 
-    rmw-bound : rmw ⊆₂ IsTCGEventX86 ×₂ IsTCGEventX86
+    rmw-bound : rmw ⊆₂ IsAIMMEventX86 ×₂ IsAIMMEventX86
     rmw-bound = ⊆₂-trans rmw-def (⊆₂-trans imm-⊆₂ po-bound)

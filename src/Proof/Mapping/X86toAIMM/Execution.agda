@@ -3,16 +3,16 @@
 -- External library imports
 open import Burrow.Template.Mapping as Δ
 -- Local imports
-open import Arch.TCG using (arch-TCG)
+open import Arch.AIMM using (arch-AIMM)
 open import Arch.Mixed using (MixedExecution)
-open import MapX86toTCG using (TCG-X86Restricted)
+open import MapX86toAIMM using (AIMM-X86Restricted)
 
 
-module Proof.Mapping.X86toTCG.Execution
-  {dst : Execution {arch-TCG}}
+module Proof.Mapping.X86toAIMM.Execution
+  {dst : Execution {arch-AIMM}}
   {dst-tex : MixedExecution dst}
   (dst-wf : WellFormed dst)
-  (dst-ok : TCG-X86Restricted dst-tex)
+  (dst-ok : AIMM-X86Restricted dst-tex)
   where
 
 -- Stdlib imports
@@ -28,14 +28,14 @@ open import Relation.Binary using (Reflexive; Symmetric; Transitive)
 open import Dodo.Binary
 -- Local imports
 open import Helpers
-open import MapX86toTCG
-open import Arch.TCG as TCG
+open import MapX86toAIMM
+open import Arch.AIMM as AIMM
 open import Arch.X86 as X86
 
 open Δ.Defs
 
 
-dst-consistent = TCG-X86Restricted.consistent dst-ok
+dst-consistent = AIMM-X86Restricted.consistent dst-ok
 
 
 -- # Backward Mapping of Relations
@@ -56,14 +56,14 @@ dst-consistent = TCG-X86Restricted.consistent dst-ok
 -- F                   ↦ F_SC
 
 
-LabR[⇐] : TCG.LabR → X86.LabR
+LabR[⇐] : AIMM.LabR → X86.LabR
 LabR[⇐] (lab-r tag) = lab-r tag
 
-LabW[⇐] : TCG.LabW → X86.LabW
+LabW[⇐] : AIMM.LabW → X86.LabW
 LabW[⇐] (lab-w tag) = lab-w tag
 
 
-ev[⇐] : {x : EventTCG}
+ev[⇐] : {x : EventAIMM}
   → (x∈dst : x ∈ events dst)
     ------------------------
   → EventX86
@@ -214,7 +214,7 @@ module Extra where
 
   open import Burrow.Framework.Mapping.Definitions δ
   open import Burrow.Framework.WellFormed ψ using (rmw[⇒]; rel[$⇒]; rel[⇐])
-  open TCG.Properties dst-tex dst-wf
+  open AIMM.Properties dst-tex dst-wf
   open MixedExecution dst-tex
   open Δ.Consistency δ using (ev[⇐$]eq)
 
@@ -229,18 +229,18 @@ module Extra where
   F[⇒] = [$⇒]→₁[⇒] F[$⇒]
 
 
-  R₌[$⇒] : Pred[$⇒] (EvR₌ loc val (X86.lab-r tag)) (EvR₌ loc val (TCG.lab-r tag))
+  R₌[$⇒] : Pred[$⇒] (EvR₌ loc val (X86.lab-r tag)) (EvR₌ loc val (AIMM.lab-r tag))
   R₌[$⇒] {_} {_} {_} {event-r _ _ _ _ (lab-r _)} x∈dst ev-r = ev-r
   -- impossible cases
   R₌[$⇒] {_} {_} {_} {event-f _ _ (𝐴R 𝐹 _)} x∈dst ()
   R₌[$⇒] {_} {_} {_} {event-f _ _ (𝐴W 𝐹 _)} x∈dst ()
   R₌[$⇒] {_} {_} {_} {event-f _ _ (𝐴M 𝐹 _)} x∈dst ()
   
-  R₌[⇒] : Pred[⇒] (EvR₌ loc val (X86.lab-r tag)) (EvR₌ loc val (TCG.lab-r tag))
+  R₌[⇒] : Pred[⇒] (EvR₌ loc val (X86.lab-r tag)) (EvR₌ loc val (AIMM.lab-r tag))
   R₌[⇒] = [$⇒]→₁[⇒] R₌[$⇒]
 
 
-  W₌[$⇒] : Pred[$⇒] (EvW₌ loc val (X86.lab-w tag)) (EvW₌ loc val (TCG.lab-w tag))
+  W₌[$⇒] : Pred[$⇒] (EvW₌ loc val (X86.lab-w tag)) (EvW₌ loc val (AIMM.lab-w tag))
   W₌[$⇒] {_} {_} {_} {event-w _ _ _ _ (lab-w _)} x∈dst ev-w = ev-w
   -- impossible cases
   W₌[$⇒] {_} {_} {_} {event-f _ _ (𝐴R 𝐹 _)} x∈dst ()

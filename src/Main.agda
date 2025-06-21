@@ -78,21 +78,21 @@ module Main where
 -- # Architecture specifications
 
 open import Arch.X86
--- The "Armed Cats" Armv8 model, with our proposed chance
+-- The "Armed Cats" Armv8 model, with the single `amo` fix
 open import Arch.Armv8
-open import Arch.TCG
+open import Arch.AIMM
 
 
 -- # Architecture mapping proofs
 
--- ## x86 ⇒ TCG
-import MapX86toTCG             -- specification
-import Proof.Mapping.X86toTCG  -- proof
+-- ## x86 ⇒ AIMM
+import MapX86toAIMM             -- specification
+import Proof.Mapping.X86toAIMM  -- proof
 
--- ## TCG ⇒ Armv8 (with atomic Compare-And-Swap instruction)
-import MapTCGtoArmv8             -- specification
-import Proof.Mapping.TCGtoArmv8  -- proof
+-- ## AIMM ⇒ Armv8 (with atomic Compare-And-Swap instruction)
+import MapAIMMtoArmv8             -- specification
+import Proof.Mapping.AIMMtoArmv8  -- proof
 
--- ## TCG ⇒ RISC-V
-import MapTCGtoRISCV             -- specification
-import Proof.Mapping.TCGtoRISCV  -- proof
+-- ## AIMM ⇒ RISC-V
+import MapAIMMtoRISCV             -- specification
+import Proof.Mapping.AIMMtoRISCV  -- proof
